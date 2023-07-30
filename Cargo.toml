@@ -1,0 +1,22 @@
+[package]
+name = "silent-threshold"
+version = "0.1.0"
+edition = "2021"
+authors = [ "Guru Vamsi Policharla" ]
+
+[dependencies]
+criterion = { version = "0.5.0", features = [ "html_reports" ] }
+ark-std = { version = "0.4.0" }
+ark-ec = { version = "0.4.0" }
+ark-ff = { version = "0.4.0" }
+ark-poly = { version = "0.4.0" }
+ark-bls12-381 = { version = "0.4.0" }
+ark-serialize = { version = "0.4.0" }
+paste = { version = "1.0" }
+crossbeam = { version = "0.8.2" }
+
+[features]
+asm = [ "ark-ff/asm" ]
+
+[profile.dev]
+opt-level = 3
