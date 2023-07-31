@@ -1,11 +1,12 @@
 // use crate::utils::{lagrange_coefficients, transpose};
 use ark_ec::{pairing::Pairing, Group};
-use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
 use ark_poly::DenseUVPolynomial;
+use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
 use ark_serialize::*;
 use ark_std::{rand::RngCore, UniformRand, Zero};
 use std::ops::{Mul, Sub};
 
+use crate::encryption::Ciphertext;
 use crate::kzg::{UniversalParams, KZG10};
 use crate::utils::lagrange_poly;
 
@@ -89,7 +90,6 @@ impl<E: Pairing> SecretKey<E> {
             .expect("commitment failed")
             .into();
 
-        
         let mut f = &li * self.sk;
         let sk_li = KZG10::commit_g1(&params, &f)
             .expect("commitment failed")
@@ -109,17 +109,21 @@ impl<E: Pairing> SecretKey<E> {
             sk_li_by_tau,
         }
     }
+
+    pub fn partial_decryption(&self, ct: &Ciphertext<E>) -> E::G2 {
+        ct.gamma_g2 * self.sk // kind of a bls signature on gamma_g2
+    }
 }
 
 impl<E: Pairing> AggregateKey<E> {
-    pub fn new(pk: Vec<PublicKey<E>>, params: &UniversalParams<E>,) -> Self {
+    pub fn new(pk: Vec<PublicKey<E>>, params: &UniversalParams<E>) -> Self {
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(pk.len()).unwrap();
-        
+
         // todo: replace this with efficient z_g2.
         let z = domain.vanishing_polynomial().clone();
         let z_g2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(&params, &z.into())
-        .expect("commitment failed")
-        .into();
+            .expect("commitment failed")
+            .into();
 
         // gather sk_li from all public keys
         let mut ask = E::G1::zero();
@@ -127,7 +131,7 @@ impl<E: Pairing> AggregateKey<E> {
             ask += pk[i].sk_li;
         }
 
-        AggregateKey { pk, ask , z_g2 }
+        AggregateKey { pk, ask, z_g2 }
     }
 }
 
@@ -144,16 +148,15 @@ mod tests {
     #[test]
     fn test_setup() {
         let mut rng = ark_std::test_rng();
-        let params = KZG10::<E, UniPoly381>::setup(1 << 4, &mut rng).unwrap();
-
         let n = 4;
+        let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();
 
         for i in 0..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(0, &params, 5))    
+            pk.push(sk[i].get_pk(0, &params, n))
         }
 
         let _ak = AggregateKey::<E>::new(pk, &params);
