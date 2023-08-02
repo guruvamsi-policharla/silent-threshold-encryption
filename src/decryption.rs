@@ -153,11 +153,8 @@ pub fn agg_dec<E: Pairing>(
     let w1 = [apk, qz, qx, qhatx, bhat, q0_g1 * (minus1)];
     let w2 = [b_g2, sigma];
 
-    // e(q0_g1, sa2[5]) + e(sa1[0], b_g2) = GT::one()
-    let lhs = E::pairing(q0_g1, ct.sa2[5]);
-    let rhs = E::pairing(ct.sa1[0], b_g2 + (params.powers_of_h[0]*(minus1)));
-    debug_assert_eq!(lhs, rhs);
-
+    // e(-q0_g1, sa2[5]) + e(sa1[0], b_g2) = enc_key when s0=s1=s2=s3=0
+    // e(-w1[5], sa2[5]) + e(sa1[0], w2[0]) = enc_key when s0=s1=s2=s3=0
     let lhs = E::pairing(q0_g1*(minus1), ct.sa2[5]);
     let rhs = E::pairing(ct.sa1[0], b_g2);
     debug_assert_eq!(lhs+rhs, ct.enc_key);
@@ -165,12 +162,12 @@ pub fn agg_dec<E: Pairing>(
     let mut enc_key_lhs = w1.to_vec();
     enc_key_lhs.append(&mut ct.sa1.to_vec());
 
-    let mut enc_key_rhs = w2.to_vec();
-    enc_key_rhs.append(&mut ct.sa2.to_vec());
+    let mut enc_key_rhs = ct.sa2.to_vec();
+    enc_key_rhs.append(&mut w2.to_vec());
 
     let enc_key = E::multi_pairing(enc_key_lhs, enc_key_rhs);
 
-    // assert_eq!(enc_key, ct.enc_key);
+    assert_eq!(enc_key, ct.enc_key);
 
     enc_key
 }
