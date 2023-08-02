@@ -1,8 +1,7 @@
 // use crate::utils::{lagrange_coefficients, transpose};
 use ark_ec::{pairing::Pairing, Group};
-use ark_ff::Field;
-use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
+use ark_poly::DenseUVPolynomial;
 use ark_serialize::*;
 use ark_std::{rand::RngCore, One, UniformRand, Zero};
 use std::ops::{Mul, Sub};
@@ -13,12 +12,11 @@ use crate::utils::lagrange_poly;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
 pub struct SecretKey<E: Pairing> {
-    pub sk: E::ScalarField, //make this non pub
+    sk: E::ScalarField,
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
 pub struct PublicKey<E: Pairing> {
-    pub sk: E::ScalarField, //make this non pub
     pub id: usize,
     pub bls_pk: E::G1,          //BLS pk
     pub sk_li: E::G1,           //hint
@@ -35,7 +33,6 @@ pub struct AggregateKey<E: Pairing> {
 
 impl<E: Pairing> PublicKey<E> {
     pub fn new(
-        sk: E::ScalarField,
         id: usize,
         bls_pk: E::G1,
         sk_li: E::G1,
@@ -44,7 +41,6 @@ impl<E: Pairing> PublicKey<E> {
         sk_li_by_tau: E::G1,
     ) -> Self {
         PublicKey {
-            sk,
             id,
             bls_pk,
             sk_li,
@@ -109,7 +105,6 @@ impl<E: Pairing> SecretKey<E> {
             .into();
 
         PublicKey {
-            sk: self.sk.clone(),
             id,
             bls_pk: E::G1::generator() * self.sk,
             sk_li,

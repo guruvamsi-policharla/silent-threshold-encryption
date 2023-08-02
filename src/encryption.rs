@@ -7,8 +7,7 @@ use ark_ec::{
 };
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_serialize::*;
-use ark_std::UniformRand;
-use ark_std::{One, Zero};
+use ark_std::{UniformRand, Zero};
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct Ciphertext<E: Pairing> {
@@ -57,15 +56,14 @@ pub fn encrypt<E: Pairing>(
     let mut sa2 = [E::G2::generator(); 6];
 
     let mut s: [E::ScalarField; 5] = [E::ScalarField::zero(); 5];
-    s[0] = E::ScalarField::one();
-    // E::ScalarField::rand(&mut rng);
+    // s[0] = E::ScalarField::rand(&mut rng); //done
     // s[1] = E::ScalarField::rand(&mut rng); //done
     // s[2] = E::ScalarField::rand(&mut rng); //done
     // s[3] = E::ScalarField::rand(&mut rng); //done
     // s[4] = E::ScalarField::rand(&mut rng); //done
 
-    // s.iter_mut()
-    //     .for_each(|s| *s = E::ScalarField::rand(&mut rng));
+    s.iter_mut()
+        .for_each(|s| *s = E::ScalarField::rand(&mut rng));
 
     // sa1[0] = s0*ask + s3*g^{tau^t} + s4*g
     sa1[0] = (apk.ask * s[0]) + (params.powers_of_g[t] * s[3]) + (params.powers_of_g[0] * s[4]);
