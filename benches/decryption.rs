@@ -16,10 +16,9 @@ fn bench_decrypt(c: &mut Criterion) {
     let mut rng = ark_std::test_rng();
     let mut group = c.benchmark_group("decrypt");
     
-    for size in 2..10 {
-        let n = 1 << 5; // actually n-1 total parties. one party is a dummy party that is always true
+    for size in 3..=10 {
+        let n = 1 << size; // actually n-1 total parties. one party is a dummy party that is always true
         let t: usize = n/2;
-        // debug_assert!(t < n);
 
         let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
 
@@ -35,6 +34,8 @@ fn bench_decrypt(c: &mut Criterion) {
             sk.push(SecretKey::<E>::new(&mut rng));
             pk.push(sk[i].get_pk(i, &params, n))
         }
+        
+        println!("Setup keys!");
 
         let agg_key = AggregateKey::<E>::new(pk, &params);
         let ct = encrypt::<E>(&agg_key, t, &params);

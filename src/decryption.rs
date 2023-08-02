@@ -1,5 +1,5 @@
 use std::ops::Div;
-use ark_ec::pairing::{Pairing, PairingOutput};
+use ark_ec::{pairing::{Pairing, PairingOutput}, VariableBaseMSM};
 use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
     Radix2EvaluationDomain,
@@ -75,42 +75,53 @@ pub fn agg_dec<E: Pairing>(
     let n_inv = E::ScalarField::one() / E::ScalarField::from((n) as u32);
 
     // compute the aggregate public key
-    let mut apk: E::G1 = E::G1::zero();
-    for i in 0..agg_key.pk.len() {
-        if selector[i] {
-            apk += agg_key.pk[i].bls_pk * b_evals[i];
-        }
+    let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
+    let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
+    for &i in &parties {
+        bases.push(agg_key.pk[i].bls_pk.into());
+        scalars.push(b_evals[i]);
     }
+    let mut apk = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
     apk *= n_inv;
 
     // compute sigma = (\sum B(omega^i)partial_decryptions[i])/(n) for i in parties
-    let mut sigma: E::G2 = E::G2::zero();
-    for i in 0..agg_key.pk.len() {
-        if selector[i] {
-            sigma += partial_decryptions[i] * b_evals[i];
-        }
+    let mut bases: Vec<<E as Pairing>::G2Affine> = Vec::new();
+    let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
+    for &i in &parties {
+        bases.push(partial_decryptions[i].into());
+        scalars.push(b_evals[i]);
     }
+    let mut sigma = E::G2::msm(bases.as_slice(), scalars.as_slice()).unwrap();
     sigma *= n_inv;
 
     // compute Qx, Qhatx and Qz
-    let mut qx: E::G1 = E::G1::zero();
+    let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
+    let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        qx += agg_key.pk[i].sk_li_by_tau * b_evals[i];
+        bases.push(agg_key.pk[i].sk_li_by_tau.into());
+        scalars.push(b_evals[i]);
     }
+    let qx = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
 
-    let mut qz: E::G1 = E::G1::zero();
+    let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
+    let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
         let mut qz_i = E::G1::zero();
         for j in 0..n {
             qz_i += agg_key.pk[j].sk_li_by_z[i];
         }
-        qz += qz_i * b_evals[i];
+        bases.push(qz_i.into());
+        scalars.push(b_evals[i]);
     }
+    let qz = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
 
-    let mut qhatx: E::G1 = E::G1::zero();
+    let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
+    let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        qhatx += agg_key.pk[i].sk_li_minus0 * b_evals[i];
+        bases.push(agg_key.pk[i].sk_li_minus0.into());
+        scalars.push(b_evals[i]);
     }
+    let qhatx = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
 
     // e(w1||sa1, sa2||w2)
     let minus1 = -E::ScalarField::one();
