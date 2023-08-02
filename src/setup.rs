@@ -1,8 +1,8 @@
 use ark_ec::pairing::PairingOutput;
 // use crate::utils::{lagrange_coefficients, transpose};
 use ark_ec::{pairing::Pairing, Group};
-use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
 use ark_poly::DenseUVPolynomial;
+use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
 use ark_serialize::*;
 use ark_std::{rand::RngCore, One, UniformRand, Zero};
 use std::ops::{Mul, Sub};
@@ -33,8 +33,7 @@ pub struct AggregateKey<E: Pairing> {
 
     //preprocessed values
     pub h_minus1: E::G2,
-    pub e_gh: PairingOutput<E>, 
-    
+    pub e_gh: PairingOutput<E>,
 }
 
 impl<E: Pairing> PublicKey<E> {
@@ -128,7 +127,8 @@ impl<E: Pairing> SecretKey<E> {
 impl<E: Pairing> AggregateKey<E> {
     pub fn new(pk: Vec<PublicKey<E>>, params: &UniversalParams<E>) -> Self {
         let n = pk.len();
-        let z_g2 = params.powers_of_h[n] + params.powers_of_h[0] * (-E::ScalarField::one());
+        let h_minus1 = params.powers_of_h[0] * (-E::ScalarField::one());
+        let z_g2 = params.powers_of_h[n] + h_minus1;
 
         // gather sk_li from all public keys
         let mut ask = E::G1::zero();
@@ -136,7 +136,13 @@ impl<E: Pairing> AggregateKey<E> {
             ask += pk[i].sk_li;
         }
 
-        AggregateKey { pk, ask, z_g2, h_minus1: params.powers_of_h[0] * (-E::ScalarField::one()), e_gh: E::pairing(params.powers_of_g[0], params.powers_of_h[0]) }
+        AggregateKey {
+            pk,
+            ask,
+            z_g2,
+            h_minus1,
+            e_gh: E::pairing(params.powers_of_g[0], params.powers_of_h[0]),
+        }
     }
 }
 

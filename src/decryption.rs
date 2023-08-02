@@ -1,10 +1,13 @@
-use std::ops::Div;
-use ark_ec::{pairing::{Pairing, PairingOutput}, VariableBaseMSM};
+use ark_ec::{
+    pairing::{Pairing, PairingOutput},
+    VariableBaseMSM,
+};
 use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
     Radix2EvaluationDomain,
 };
 use ark_std::{One, Zero};
+use std::ops::Div;
 
 use crate::{
     encryption::Ciphertext,
@@ -166,7 +169,7 @@ mod tests {
     fn test_decryption() {
         let mut rng = ark_std::test_rng();
         let n = 1 << 4; // actually n-1 total parties. one party is a dummy party that is always true
-        let t: usize = n/2;
+        let t: usize = n / 2;
         debug_assert!(t < n);
 
         let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();

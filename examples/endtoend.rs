@@ -1,7 +1,12 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
-use silent_threshold::{kzg::KZG10, setup::{PublicKey, SecretKey, AggregateKey}, encryption::encrypt, decryption::agg_dec};
 use ark_std::Zero;
+use silent_threshold::{
+    decryption::agg_dec,
+    encryption::encrypt,
+    kzg::KZG10,
+    setup::{AggregateKey, PublicKey, SecretKey},
+};
 
 type E = ark_bls12_381::Bls12_381;
 type G2 = <E as Pairing>::G2;
