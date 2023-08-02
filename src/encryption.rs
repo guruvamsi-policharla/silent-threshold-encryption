@@ -58,11 +58,10 @@ pub fn encrypt<E: Pairing>(
 
     let mut s: [E::ScalarField; 5] = [E::ScalarField::zero(); 5];
     // s[0] = E::ScalarField::rand(&mut rng);
-    // s[1] = E::ScalarField::rand(&mut rng);
-    // s[2] = E::ScalarField::rand(&mut rng);
-    // s[3] = E::ScalarField::rand(&mut rng);
-    s[4] = E::ScalarField::rand(&mut rng);
-    // 
+    s[1] = E::ScalarField::rand(&mut rng); //done
+    s[2] = E::ScalarField::rand(&mut rng);
+    s[3] = E::ScalarField::rand(&mut rng); //done
+    s[4] = E::ScalarField::rand(&mut rng); //done
 
     // s.iter_mut()
     //     .for_each(|s| *s = E::ScalarField::rand(&mut rng));

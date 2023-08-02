@@ -87,46 +87,58 @@ pub fn agg_dec<E: Pairing>(
     debug_assert_eq!(bhat.degree(),n-1);
     // println!("bhat.degree():{}", bhat.degree());
 
-    let bhat = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(
+    let bhat_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(
         &params,
         &bhat,
     )
     .unwrap()
     .into();
 
+    let m_inv = E::ScalarField::one()/E::ScalarField::from((n+1) as u32);
+    // compute the aggregate public key
+    let mut apk: E::G1 = params.powers_of_g[0].into();
+    for i in 1..agg_key.pk.len() {
+        if selector[i] {
+            apk += agg_key.pk[i].bls_pk * b_evals[i];
+        }
+    }
+    apk *= m_inv;
+
+    // compute sigma = (\sum B(omega^i)partial_decryptions[i])/(m+1) for i in parties
+    let mut sigma: E::G2 = ct.gamma_g2;
+    for i in 1..agg_key.pk.len() {
+        if selector[i] {
+            sigma += partial_decryptions[i] * b_evals[i];
+        }
+    }
+    sigma *= m_inv;
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // todo: stop accumulating the dummy party public key
     // accumulate the public key
     // count number of true in selector
-    let mut v: usize = 0;
-    for i in 1..selector.len() {
-        if selector[i] {
-            v += 1;
-        }
-    }
+    // let mut v: usize = 0;
+    // for i in 1..selector.len() {
+    //     if selector[i] {
+    //         v += 1;
+    //     }
+    // }
     // selector.iter().for_each(|x| {
     //     if *x {
     //         v += 1;
     //     }
     // });
-    let mut v = E::ScalarField::from(v as u32);
-    v.inverse_in_place();
-
-    // compute the aggregate public key
-    let mut apk = E::G1::zero();
-    for i in 1..agg_key.pk.len() {
-        if selector[i] {
-            apk += agg_key.pk[i].bls_pk;
-        }
-    }
-    apk *= v;
+    // let mut v = E::ScalarField::from(v as u32);
+    // v.inverse_in_place();
+    
+    
 
     // compute Qx, Qhatx and Qz
     let mut qx: E::G1 = E::G1::zero();
     for &i in &parties {
         qx += agg_key.pk[i].sk_li_by_tau * b_evals[i];
     }
-
+    
     let mut qz: E::G1 = E::G1::zero();
     for &i in &parties {
         let mut qz_i = E::G1::zero();
@@ -140,24 +152,17 @@ pub fn agg_dec<E: Pairing>(
     for &i in &parties {
         qhatx += agg_key.pk[i].sk_li_minus0 * b_evals[i];
     }
-
-    // compute sigma = (\sum partial_decryptions[i])/v for i in parties
-    let mut sigma: E::G2 = E::G2::zero();
-    for &i in &parties {
-        sigma += partial_decryptions[i];
-    }
-    sigma *= v;
     
     // e(w1||sa1, sa2||w2) 
     let minus1 = -E::ScalarField::one();
-    let w1 = [apk, qz, qx, qhatx, bhat, q0_g1 * (minus1)];
+    let w1 = [apk * (minus1), qz, qx, qhatx, bhat_g1 * (minus1), q0_g1 * (minus1)];
     let w2 = [b_g2, sigma];
 
     // e(-q0_g1, sa2[5]) + e(sa1[0], b_g2) = enc_key when s0=s1=s2=s3=0
     // e(-w1[5], sa2[5]) + e(sa1[0], w2[0]) = enc_key when s0=s1=s2=s3=0
-    let lhs = E::pairing(q0_g1*(minus1), ct.sa2[5]);
-    let rhs = E::pairing(ct.sa1[0], b_g2);
-    debug_assert_eq!(lhs+rhs, ct.enc_key);
+    // let lhs = E::pairing(q0_g1*(minus1), ct.sa2[5]);
+    // let rhs = E::pairing(ct.sa1[0], b_g2);
+    // debug_assert_eq!(lhs+rhs, ct.enc_key);
 
     let mut enc_key_lhs = w1.to_vec();
     enc_key_lhs.append(&mut ct.sa1.to_vec());
@@ -200,9 +205,13 @@ mod tests {
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();
 
-        for i in 0..n {
+        sk.push(SecretKey::<E>::new(&mut rng));
+        sk[0].nullify();
+        pk.push(sk[0].get_pk(0, &params, n));
+
+        for i in 1..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(0, &params, n))
+            pk.push(sk[i].get_pk(i, &params, n))
         }
 
         let agg_key = AggregateKey::<E>::new(pk, &params);

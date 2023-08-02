@@ -3,7 +3,7 @@ use ark_ec::{pairing::Pairing, Group};
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
 use ark_serialize::*;
-use ark_std::{rand::RngCore, UniformRand, Zero};
+use ark_std::{rand::RngCore, UniformRand, Zero, One};
 use std::ops::{Mul, Sub};
 
 use crate::encryption::Ciphertext;
@@ -56,6 +56,10 @@ impl<E: Pairing> SecretKey<E> {
         SecretKey {
             sk: E::ScalarField::rand(rng),
         }
+    }
+
+    pub fn nullify(&mut self) {
+        self.sk = E::ScalarField::one()
     }
 
     pub fn get_pk(&self, id: usize, params: &UniversalParams<E>, n: usize) -> PublicKey<E> {
