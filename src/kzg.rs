@@ -10,8 +10,6 @@ use ark_poly::DenseUVPolynomial;
 use ark_std::{format, marker::PhantomData, ops::*, vec};
 
 use ark_std::rand::RngCore;
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 
 pub struct KZG10<E: Pairing, P: DenseUVPolynomial<E::ScalarField>> {
     _engine: PhantomData<E>,

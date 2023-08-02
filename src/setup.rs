@@ -1,9 +1,10 @@
 // use crate::utils::{lagrange_coefficients, transpose};
 use ark_ec::{pairing::Pairing, Group};
-use ark_poly::DenseUVPolynomial;
+use ark_ff::Field;
+use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
 use ark_serialize::*;
-use ark_std::{rand::RngCore, UniformRand, Zero, One};
+use ark_std::{rand::RngCore, One, UniformRand, Zero};
 use std::ops::{Mul, Sub};
 
 use crate::encryption::Ciphertext;
@@ -12,11 +13,12 @@ use crate::utils::lagrange_poly;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
 pub struct SecretKey<E: Pairing> {
-    sk: E::ScalarField,
+    pub sk: E::ScalarField, //make this non pub
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize)]
 pub struct PublicKey<E: Pairing> {
+    pub sk: E::ScalarField, //make this non pub
     pub id: usize,
     pub bls_pk: E::G1,          //BLS pk
     pub sk_li: E::G1,           //hint
@@ -33,6 +35,7 @@ pub struct AggregateKey<E: Pairing> {
 
 impl<E: Pairing> PublicKey<E> {
     pub fn new(
+        sk: E::ScalarField,
         id: usize,
         bls_pk: E::G1,
         sk_li: E::G1,
@@ -41,6 +44,7 @@ impl<E: Pairing> PublicKey<E> {
         sk_li_by_tau: E::G1,
     ) -> Self {
         PublicKey {
+            sk,
             id,
             bls_pk,
             sk_li,
@@ -105,6 +109,7 @@ impl<E: Pairing> SecretKey<E> {
             .into();
 
         PublicKey {
+            sk: self.sk.clone(),
             id,
             bls_pk: E::G1::generator() * self.sk,
             sk_li,
@@ -121,17 +126,12 @@ impl<E: Pairing> SecretKey<E> {
 
 impl<E: Pairing> AggregateKey<E> {
     pub fn new(pk: Vec<PublicKey<E>>, params: &UniversalParams<E>) -> Self {
-        let domain = Radix2EvaluationDomain::<E::ScalarField>::new(pk.len()).unwrap();
-
-        // todo: replace this with efficient z_g2.
-        let z = domain.vanishing_polynomial().clone();
-        let z_g2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(&params, &z.into())
-            .expect("commitment failed")
-            .into();
+        let n = pk.len();
+        let z_g2 = params.powers_of_h[n] + params.powers_of_h[0] * (-E::ScalarField::one());
 
         // gather sk_li from all public keys
         let mut ask = E::G1::zero();
-        for i in 0..pk.len() {
+        for i in 0..n {
             ask += pk[i].sk_li;
         }
 
@@ -145,9 +145,6 @@ mod tests {
 
     type E = ark_bls12_381::Bls12_381;
     type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
-    // type F = <E as Pairing>::ScalarField;
-    // type G1 = <E as Pairing>::G1;
-    // type G2 = <E as Pairing>::G2;
 
     #[test]
     fn test_setup() {
@@ -166,50 +163,3 @@ mod tests {
         let _ak = AggregateKey::<E>::new(pk, &params);
     }
 }
-
-// fn party_i_setup_material(
-//     params: &UniversalParams<Bls12_381>,
-//     n: usize,
-//     i: usize,
-//     sk_i: &F) -> (G1, G2, Vec<G1>, G1) {
-//     //let us compute the q1 term
-//     let l_i_of_x = utils::lagrange_poly(n, i);
-//     let z_of_x = utils::compute_vanishing_poly(n);
-
-//     let mut q1_material = vec![];
-//     //let us compute the cross terms of q1
-//     for j in 0..n {
-//         let num: DensePolynomial<F>;// = compute_constant_poly(&F::from(0));
-//         if i == j {
-//             num = l_i_of_x.clone().mul(&l_i_of_x).sub(&l_i_of_x);
-//         } else { //cross-terms
-//             let l_j_of_x = utils::lagrange_poly(n, j);
-//             num = l_j_of_x.mul(&l_i_of_x);
-//         }
-//         let f = num.div(&z_of_x);
-//         let sk_times_f = utils::poly_eval_mult_c(&f, &sk_i);
-
-//         let com = KZG::commit_g1(&params, &sk_times_f)
-//             .expect("commitment failed");
-
-//         q1_material.push(com);
-//     }
-
-//     let x_monomial = utils::compute_x_monomial();
-//     let l_i_of_0 = l_i_of_x.evaluate(&F::from(0));
-//     let l_i_of_0_poly = utils::compute_constant_poly(&l_i_of_0);
-//     let num = l_i_of_x.sub(&l_i_of_0_poly);
-//     let den = x_monomial.clone();
-//     let f = num.div(&den);
-//     let sk_times_f = utils::poly_eval_mult_c(&f, &sk_i);
-//     let q2_com = KZG::commit_g1(&params, &sk_times_f).expect("commitment failed");
-
-//     //release my public key
-//     let sk_as_poly = utils::compute_constant_poly(&sk_i);
-//     let pk = KZG::commit_g1(&params, &sk_as_poly).expect("commitment failed");
-
-//     let sk_times_l_i_of_x = utils::poly_eval_mult_c(&l_i_of_x, &sk_i);
-//     let com_sk_l_i = KZG::commit_g2(&params, &sk_times_l_i_of_x).expect("commitment failed");
-
-//     (pk, com_sk_l_i, q1_material, q2_com)
-// }

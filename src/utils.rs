@@ -6,6 +6,7 @@ use ark_poly::{
 
 // 1 at omega^i and 0 elsewhere on domain {omega^i}_{i \in [n]}
 pub fn lagrange_poly<F: FftField>(n: usize, i: usize) -> DensePolynomial<F> {
+    debug_assert!(i < n);
     //todo: check n is a power of 2
     let mut evals = vec![];
     for j in 0..n {
@@ -61,8 +62,8 @@ pub fn lagrange_interpolate<F: Field>(evals: &Vec<F>, points: &Vec<F>) -> DenseP
     interp
 }
 
-// interpolates a polynomial when all evaluations except at points[0] are zero
-// todo: check that multiplication is fast as one polynomial is shorter
+/// interpolates a polynomial when all evaluations except at points[0] are zero
+/// todo: check that multiplication is fast as one polynomial is shorter
 pub fn interp_mostly_zero<F: Field>(eval: F, points: &Vec<F>) -> DensePolynomial<F> {
     if points.len() == 0 {
         // threshold=n
