@@ -5,7 +5,6 @@ use ark_ec::{
     pairing::{Pairing, PairingOutput},
     Group,
 };
-use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_serialize::*;
 use ark_std::{UniformRand, Zero};
 
@@ -50,17 +49,12 @@ pub fn encrypt<E: Pairing>(
     let h = params.powers_of_h[0];
 
     // todo: avoid benchmarking this
-    let e_gh = E::pairing(g, h);
+    // let e_gh = E::pairing(g, h);
 
     let mut sa1 = [E::G1::generator(); 2];
     let mut sa2 = [E::G2::generator(); 6];
 
     let mut s: [E::ScalarField; 5] = [E::ScalarField::zero(); 5];
-    // s[0] = E::ScalarField::rand(&mut rng); //done
-    // s[1] = E::ScalarField::rand(&mut rng); //done
-    // s[2] = E::ScalarField::rand(&mut rng); //done
-    // s[3] = E::ScalarField::rand(&mut rng); //done
-    // s[4] = E::ScalarField::rand(&mut rng); //done
 
     s.iter_mut()
         .for_each(|s| *s = E::ScalarField::rand(&mut rng));
@@ -87,15 +81,11 @@ pub fn encrypt<E: Pairing>(
     sa2[4] = h * s[3];
 
     // sa2[5] = s4*h^{tau - omega^0}
-    let n = apk.pk.len();
-    let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
-    sa2[5] = (params.powers_of_h[1] + (params.powers_of_h[0] * (-domain.element(0)))) * s[4];
+    sa2[5] = (params.powers_of_h[1] + apk.h_minus1) * s[4];
 
     // enc_key = s4*e_gh
-    let enc_key = e_gh.mul(s[4]);
+    let enc_key = apk.e_gh.mul(s[4]);
 
-    // println!("sa1 = {:?}", sa1);
-    // println!("sa2 = {:?}", sa2);
     Ciphertext {
         gamma_g2,
         sa1,

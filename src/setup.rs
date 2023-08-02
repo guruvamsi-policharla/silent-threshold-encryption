@@ -1,3 +1,4 @@
+use ark_ec::pairing::PairingOutput;
 // use crate::utils::{lagrange_coefficients, transpose};
 use ark_ec::{pairing::Pairing, Group};
 use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
@@ -29,6 +30,11 @@ pub struct AggregateKey<E: Pairing> {
     pub pk: Vec<PublicKey<E>>,
     pub ask: E::G1,
     pub z_g2: E::G2,
+
+    //preprocessed values
+    pub h_minus1: E::G2,
+    pub e_gh: PairingOutput<E>, 
+    
 }
 
 impl<E: Pairing> PublicKey<E> {
@@ -130,7 +136,7 @@ impl<E: Pairing> AggregateKey<E> {
             ask += pk[i].sk_li;
         }
 
-        AggregateKey { pk, ask, z_g2 }
+        AggregateKey { pk, ask, z_g2, h_minus1: params.powers_of_h[0] * (-E::ScalarField::one()), e_gh: E::pairing(params.powers_of_g[0], params.powers_of_h[0]) }
     }
 }
 

@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use silent_threshold::{
     encryption::encrypt,
     kzg::KZG10,
@@ -10,7 +10,6 @@ use silent_threshold::{
 type E = ark_bls12_381::Bls12_381;
 type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
-//todo: use seeded randomness
 fn bench_encrypt(c: &mut Criterion) {
     let mut rng = ark_std::test_rng();
     let n = 8;
@@ -26,18 +25,8 @@ fn bench_encrypt(c: &mut Criterion) {
     }
 
     let ak = AggregateKey::<E>::new(pk, &params);
-    // let ct = encrypt::<E>(&ak, t, &params);
 
-    let mut group = c.benchmark_group("encrypt");
-    group.bench_with_input(
-        BenchmarkId::from_parameter(n),
-        &(ak, t, params),
-        |b, inp| {
-            b.iter(|| encrypt::<E>(&inp.0, inp.1, &inp.2));
-        },
-    );
-
-    group.finish();
+    c.bench_function("encrypt", |b| b.iter(|| encrypt::<E>(&ak, t, &params)));
 }
 
 criterion_group!(benches, bench_encrypt);

@@ -154,8 +154,8 @@ mod tests {
     #[test]
     fn test_decryption() {
         let mut rng = ark_std::test_rng();
-        let n = 1 << 5; // actually n-1 total parties. one party is a dummy party that is always true
-        let t: usize = 9;
+        let n = 1 << 4; // actually n-1 total parties. one party is a dummy party that is always true
+        let t: usize = n/2;
         debug_assert!(t < n);
 
         let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
