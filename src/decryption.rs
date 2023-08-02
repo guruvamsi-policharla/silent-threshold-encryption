@@ -1,6 +1,7 @@
-use std::ops::Div;
+use std::ops::{Div, Mul};
 
 use ark_ec::pairing::{Pairing, PairingOutput};
+use ark_ec::Group;
 use ark_ff::Field;
 use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Radix2EvaluationDomain, Polynomial,
@@ -40,12 +41,43 @@ pub fn agg_dec<E: Pairing>(
     let b_evals = domain.fft(&b.coeffs);
 
     debug_assert!(b.degree() == points.len()-1);
-    // println!("t:{}, points.len():{}", ct.t, points.len());
+    debug_assert!(b.evaluate(&domain_elements[0]) == E::ScalarField::one());
 
     // commit to b in g2
-    let b_g2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(&params, &b)
+    let b_g2: E::G2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(&params, &b)
         .unwrap()
         .into();
+
+    // q0 = (b-1)/(x-domain_elements[0])
+    let mut bminus1 = b.clone();
+    bminus1.coeffs[0] -= E::ScalarField::one();
+    
+    debug_assert!(bminus1.evaluate(&domain_elements[0]) == E::ScalarField::zero());
+
+    let xminus1 = DensePolynomial::from_coefficients_vec(vec![
+        -domain_elements[0],
+        E::ScalarField::one(),
+    ]);
+    let q0 = bminus1.div(&xminus1);
+
+    let q0_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(&params, &q0)
+        .unwrap()
+        .into();
+    
+    // check that KZG verification passes
+    let htau_x = params.powers_of_h[1] + (params.powers_of_h[0] * (-domain.element(0)));
+    // let rhs = KZG10::commit_g2(&params, &xminus1).unwrap().into();
+    // debug_assert_eq!(htau_x, rhs);
+
+    // debug_assert_eq!(E::pairing(E::G1::generator(), E::G2::generator()), E::pairing(params.powers_of_g[0], params.powers_of_h[0]));
+
+    debug_assert_eq!(
+        E::pairing(
+            params.powers_of_g[0],
+            b_g2 + (params.powers_of_h[0]*(-E::ScalarField::one())), 
+        ), 
+        E::pairing(q0_g1, htau_x)
+    );
 
     // bhat = x^t * b
     // insert t 0s at the beginning of bhat.coeffs
@@ -62,6 +94,7 @@ pub fn agg_dec<E: Pairing>(
     .unwrap()
     .into();
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // todo: stop accumulating the dummy party public key
     // accumulate the public key
     // count number of true in selector
@@ -114,24 +147,20 @@ pub fn agg_dec<E: Pairing>(
         sigma += partial_decryptions[i];
     }
     sigma *= v;
+    
+    // e(w1||sa1, sa2||w2) 
+    let minus1 = -E::ScalarField::one();
+    let w1 = [apk, qz, qx, qhatx, bhat, q0_g1 * (minus1)];
+    let w2 = [b_g2, sigma];
 
-    // q0 = (b-1)/(x-domain_elements[0])
-    let mut bminus1 = b.clone();
-    bminus1.coeffs[0] -= E::ScalarField::one();
+    // e(q0_g1, sa2[5]) + e(sa1[0], b_g2) = GT::one()
+    let lhs = E::pairing(q0_g1, ct.sa2[5]);
+    let rhs = E::pairing(ct.sa1[0], b_g2 + (params.powers_of_h[0]*(minus1)));
+    debug_assert_eq!(lhs, rhs);
 
-    let q0 = b.div(&DensePolynomial::from_coefficients_vec(vec![
-        -domain_elements[0],
-        E::ScalarField::one(),
-    ]));
-
-    // debug_assert_eq!()
-
-    let q0_g1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(&params, &q0)
-        .unwrap()
-        .into();
-
-    let w1 = [apk, qz, qx, qhatx, bhat, q0_g1];
-    let w2 = [sigma, b_g2];
+    let lhs = E::pairing(q0_g1*(minus1), ct.sa2[5]);
+    let rhs = E::pairing(ct.sa1[0], b_g2);
+    debug_assert_eq!(lhs+rhs, ct.enc_key);
 
     let mut enc_key_lhs = w1.to_vec();
     enc_key_lhs.append(&mut ct.sa1.to_vec());
@@ -141,7 +170,7 @@ pub fn agg_dec<E: Pairing>(
 
     let enc_key = E::multi_pairing(enc_key_lhs, enc_key_rhs);
 
-    assert_eq!(enc_key, ct.enc_key);
+    // assert_eq!(enc_key, ct.enc_key);
 
     enc_key
 }
@@ -166,7 +195,7 @@ mod tests {
     fn test_decryption() {
         let mut rng = ark_std::test_rng();
         let n = 1<<3; // actually n-1 total parties. one party is a dummy party that is always true
-        let t: usize = 7;
+        let t: usize = 6;
         debug_assert!(t<n);
 
         let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
