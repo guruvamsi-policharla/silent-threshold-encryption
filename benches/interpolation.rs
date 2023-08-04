@@ -10,7 +10,7 @@ type F = <E as Pairing>::ScalarField;
 fn bench_interpolate(c: &mut Criterion) {
     let mut group = c.benchmark_group("interpolate");
 
-    for size in 3..10 {
+    for size in 3..=10 {
         let n = 1 << size; // actually n-1 total parties. one party is a dummy party that is always true
         let t: usize = n / 2;
 

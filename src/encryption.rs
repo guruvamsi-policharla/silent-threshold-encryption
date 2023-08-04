@@ -105,6 +105,8 @@ mod tests {
     use ark_poly::univariate::DensePolynomial;
 
     type E = ark_bls12_381::Bls12_381;
+    type G1 = <E as Pairing>::G1;
+    type G2 = <E as Pairing>::G2;
     type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
@@ -122,6 +124,25 @@ mod tests {
         }
 
         let ak = AggregateKey::<E>::new(pk, &params);
-        let _ct = encrypt::<E>(&ak, 2, &params);
+        let ct = encrypt::<E>(&ak, 2, &params);
+
+        let mut ct_bytes = Vec::new();
+        ct.serialize_compressed(&mut ct_bytes).unwrap();
+        println!("Compressed ciphertext: {} bytes", ct_bytes.len());
+
+        let mut g1_bytes = Vec::new();
+        let mut g2_bytes = Vec::new();
+        let mut e_gh_bytes = Vec::new();
+
+        let g = G1::generator();
+        let h = G2::generator();
+
+        g.serialize_compressed(&mut g1_bytes).unwrap();
+        h.serialize_compressed(&mut g2_bytes).unwrap();
+        ak.e_gh.serialize_compressed(&mut e_gh_bytes).unwrap();
+
+        println!("G1 len: {} bytes", g1_bytes.len());
+        println!("G2 len: {} bytes", g2_bytes.len());
+        println!("GT len: {} bytes", e_gh_bytes.len());
     }
 }

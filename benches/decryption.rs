@@ -31,9 +31,17 @@ fn bench_decrypt(c: &mut Criterion) {
         sk[0].nullify();
         pk.push(sk[0].get_pk(0, &params, n));
 
-        for i in 1..n {
-            sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(i, &params, n))
+        // for i in 1..n {
+        //     sk.push(SecretKey::<E>::new(&mut rng));
+        //     pk.push(sk[i].get_pk(i, &params, n));
+        // }
+
+        sk.push(SecretKey::<E>::new(&mut rng));
+        pk.push(sk[1].get_pk(1, &params, n));
+
+        for _ in 2..n {
+            sk.push(sk[1].clone());
+            pk.push(pk[1].clone());
         }
 
         println!("Setup keys!");

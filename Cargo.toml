@@ -2,7 +2,6 @@
 name = "silent-threshold"
 version = "0.1.0"
 edition = "2021"
-authors = [ "Guru Vamsi Policharla" ]
 
 [dependencies]
 criterion = { version = "0.5.0", features = [ "html_reports" ] }
@@ -29,4 +28,8 @@ harness = false
 
 [[bench]]
 name = "interpolation"
+harness = false
+
+[[bench]]
+name = "setup"
 harness = false

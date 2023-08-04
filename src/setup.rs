@@ -11,12 +11,12 @@ use crate::encryption::Ciphertext;
 use crate::kzg::{UniversalParams, KZG10};
 use crate::utils::lagrange_poly;
 
-#[derive(CanonicalSerialize, CanonicalDeserialize)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SecretKey<E: Pairing> {
     sk: E::ScalarField,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct PublicKey<E: Pairing> {
     pub id: usize,
     pub bls_pk: E::G1,          //BLS pk
@@ -28,6 +28,7 @@ pub struct PublicKey<E: Pairing> {
 
 pub struct AggregateKey<E: Pairing> {
     pub pk: Vec<PublicKey<E>>,
+    pub agg_sk_li_by_z: Vec<E::G1>,
     pub ask: E::G1,
     pub z_g2: E::G2,
 
@@ -135,9 +136,19 @@ impl<E: Pairing> AggregateKey<E> {
         for i in 0..n {
             ask += pk[i].sk_li;
         }
+        
+        let mut agg_sk_li_by_z = vec![];
+        for i in 0..n {
+            let mut agg_sk_li_by_zi = E::G1::zero();
+            for j in 0..n {
+                agg_sk_li_by_zi += pk[j].sk_li_by_z[i];
+            }
+            agg_sk_li_by_z.push(agg_sk_li_by_zi);
+        }
 
         AggregateKey {
             pk,
+            agg_sk_li_by_z,
             ask,
             z_g2,
             h_minus1,

@@ -109,11 +109,7 @@ pub fn agg_dec<E: Pairing>(
     let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
     let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        let mut qz_i = E::G1::zero();
-        for j in 0..n {
-            qz_i += agg_key.pk[j].sk_li_by_z[i];
-        }
-        bases.push(qz_i.into());
+        bases.push(agg_key.agg_sk_li_by_z[i].into());
         scalars.push(b_evals[i]);
     }
     let qz = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
@@ -146,7 +142,7 @@ pub fn agg_dec<E: Pairing>(
 
     let enc_key = E::multi_pairing(enc_key_lhs, enc_key_rhs);
 
-    assert_eq!(enc_key, ct.enc_key);
+    debug_assert_eq!(enc_key, ct.enc_key);
 
     enc_key
 }
