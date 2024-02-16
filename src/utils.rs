@@ -24,10 +24,11 @@ pub fn lagrange_poly<F: FftField>(n: usize, i: usize) -> DensePolynomial<F> {
 /// interpolates a polynomial when all evaluations except at points[0] are zero
 /// todo: check that multiplication is fast as one polynomial is shorter
 pub fn interp_mostly_zero<F: Field>(eval: F, points: &Vec<F>) -> DensePolynomial<F> {
-    if points.len() == 0 {
+    if points.is_empty() {
         // threshold=n
         return DensePolynomial::from_coefficients_vec(vec![F::one()]);
     }
+
     let mut interp = DensePolynomial::from_coefficients_vec(vec![F::one()]);
     for &point in &points[1..] {
         interp = interp.naive_mul(&DensePolynomial::from_coefficients_vec(vec![

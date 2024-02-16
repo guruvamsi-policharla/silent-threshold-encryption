@@ -2,7 +2,6 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-//use ark_ec::AffineRepr;
 use ark_ec::{pairing::Pairing, CurveGroup, Group};
 use ark_ec::{scalar_mul::fixed_base::FixedBase, VariableBaseMSM};
 use ark_ff::{One, PrimeField, UniformRand, Zero};
@@ -21,9 +20,6 @@ pub struct UniversalParams<E: Pairing> {
     pub powers_of_g: Vec<E::G1Affine>,
     /// Group elements of the form `{ \beta^i H }`, where `i` ranges from 0 to `degree`.
     pub powers_of_h: Vec<E::G2Affine>,
-    // Lagrange coefficients -- preprocessing doubles storage
-    // pub lag_of_g: Vec<E::G1>,
-    // pub lag_of_h: Vec<E::G2>,
 }
 
 #[derive(Debug)]
@@ -49,23 +45,6 @@ where
     for<'a, 'b> &'a P: Div<&'b P, Output = P>,
     for<'a, 'b> &'a P: Sub<&'b P, Output = P>,
 {
-    /// Constructs public parameters when given as input the maximum degree `degree`
-    /// for the polynomial commitment scheme.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ark_poly_commit::kzg10::KZG10;
-    /// use ark_bls12_381::Bls12_381;
-    /// use ark_bls12_381::Fr;
-    /// use ark_poly::univariate::DensePolynomial;
-    /// use ark_ec::pairing::Pairing;
-    /// use ark_std::test_rng;
-    /// type UniPoly_381 = DensePolynomial<<Bls12_381 as Pairing>::ScalarField>;
-    ///
-    /// let rng = &mut test_rng();
-    /// let params = KZG10::<Bls12_381, UniPoly_381>::setup(10, false, rng).expect("Setup failed");
-    /// ```
     pub fn setup<R: RngCore>(max_degree: usize, rng: &mut R) -> Result<UniversalParams<E>, Error> {
         if max_degree < 1 {
             return Err(Error::DegreeIsZero);
@@ -107,42 +86,11 @@ where
         Ok(pp)
     }
 
-    /// Outputs a commitment to `polynomial`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ark_poly_commit::kzg10::{KZG10, Powers};
-    /// use ark_bls12_381::Bls12_381;
-    /// use ark_bls12_381::Fr;
-    /// use ark_poly::DenseUVPolynomial;
-    /// use ark_poly::univariate::DensePolynomial;
-    /// use ark_ec::pairing::Pairing;
-    /// use ark_ec::AffineRepr;
-    /// use ark_std::test_rng;
-    /// use ark_std::Zero;
-    /// type UniPoly_381 = DensePolynomial<<Bls12_381 as Pairing>::ScalarField>;
-    ///
-    /// let rng = &mut test_rng();
-    /// let params = KZG10::<Bls12_381, UniPoly_381>::setup(10, false, rng).expect("Setup failed");
-    /// let powers_of_g = params.powers_of_g[..=10].to_vec();
-    /// let powers_of_gamma_g = (0..=10)
-    ///     .map(|i| params.powers_of_gamma_g[&i])
-    ///     .collect();
-    /// let powers = Powers {
-    ///     powers_of_g: ark_std::borrow::Cow::Owned(powers_of_g),
-    ///     powers_of_gamma_g: ark_std::borrow::Cow::Owned(powers_of_gamma_g),
-    /// };
-    /// let secret_poly = UniPoly_381::rand(10, rng);
-    /// let (comm, r) = KZG10::<Bls12_381, UniPoly_381>::commit(&powers, &secret_poly, None, None).expect("Commitment failed");
-    /// assert!(!comm.0.is_zero(), "Commitment should not be zero");
-    /// assert!(!r.is_hiding(), "Commitment should not be hiding");
-    /// ```
     pub fn commit_g1(params: &UniversalParams<E>, polynomial: &P) -> Result<E::G1Affine, Error> {
         let d = polynomial.degree();
         check_degree_is_too_large(d, params.powers_of_g.len())?;
 
-        let plain_coeffs = convert_to_bigints(&polynomial.coeffs());
+        let plain_coeffs = convert_to_bigints(polynomial.coeffs());
 
         let powers_of_g = &params.powers_of_g[..=d].to_vec();
         //let msm_time = start_timer!(|| "MSM to compute commitment to plaintext poly");
@@ -155,7 +103,7 @@ where
         let d = polynomial.degree();
         check_degree_is_too_large(d, params.powers_of_h.len())?;
 
-        let plain_coeffs = convert_to_bigints(&polynomial.coeffs());
+        let plain_coeffs = convert_to_bigints(polynomial.coeffs());
 
         let powers_of_h = &params.powers_of_h[..=d].to_vec();
         //let msm_time = start_timer!(|| "MSM to compute commitment to plaintext poly");
@@ -193,10 +141,9 @@ fn skip_leading_zeros_and_convert_to_bigints<F: PrimeField, P: DenseUVPolynomial
 }
 
 pub fn convert_to_bigints<F: PrimeField>(p: &[F]) -> Vec<F::BigInt> {
-    let coeffs = ark_std::cfg_iter!(p)
+    ark_std::cfg_iter!(p)
         .map(|s| s.into_bigint())
-        .collect::<Vec<_>>();
-    coeffs
+        .collect::<Vec<_>>()
 }
 
 fn check_degree_is_too_large(degree: usize, num_powers: usize) -> Result<(), Error> {

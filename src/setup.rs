@@ -75,19 +75,18 @@ impl<E: Pairing> SecretKey<E> {
 
         let mut sk_li_by_z = vec![];
         for j in 0..n {
-            let num: DensePolynomial<E::ScalarField>;
-            if id == j {
-                num = li.clone().mul(&li).sub(&li);
+            let num = if id == j {
+                li.clone().mul(&li).sub(&li)
             } else {
                 //cross-terms
                 let l_j = lagrange_poly(n, j);
-                num = l_j.mul(&li);
-            }
+                l_j.mul(&li)
+            };
 
             let f = num.divide_by_vanishing_poly(domain).unwrap().0;
             let sk_times_f = &f * self.sk;
 
-            let com = KZG10::commit_g1(&params, &sk_times_f)
+            let com = KZG10::commit_g1(params, &sk_times_f)
                 .expect("commitment failed")
                 .into();
 
@@ -96,17 +95,17 @@ impl<E: Pairing> SecretKey<E> {
 
         let f = DensePolynomial::from_coefficients_vec(li.coeffs[1..].to_vec());
         let sk_times_f = &f * self.sk;
-        let sk_li_by_tau = KZG10::commit_g1(&params, &sk_times_f)
+        let sk_li_by_tau = KZG10::commit_g1(params, &sk_times_f)
             .expect("commitment failed")
             .into();
 
         let mut f = &li * self.sk;
-        let sk_li = KZG10::commit_g1(&params, &f)
+        let sk_li = KZG10::commit_g1(params, &f)
             .expect("commitment failed")
             .into();
 
         f.coeffs[0] = E::ScalarField::zero();
-        let sk_li_minus0 = KZG10::commit_g1(&params, &f)
+        let sk_li_minus0 = KZG10::commit_g1(params, &f)
             .expect("commitment failed")
             .into();
 
@@ -133,15 +132,15 @@ impl<E: Pairing> AggregateKey<E> {
 
         // gather sk_li from all public keys
         let mut ask = E::G1::zero();
-        for i in 0..n {
-            ask += pk[i].sk_li;
+        for pki in pk.iter() {
+            ask += pki.sk_li;
         }
-        
+
         let mut agg_sk_li_by_z = vec![];
         for i in 0..n {
             let mut agg_sk_li_by_zi = E::G1::zero();
-            for j in 0..n {
-                agg_sk_li_by_zi += pk[j].sk_li_by_z[i];
+            for pkj in pk.iter() {
+                agg_sk_li_by_zi += pkj.sk_li_by_z[i];
             }
             agg_sk_li_by_z.push(agg_sk_li_by_zi);
         }

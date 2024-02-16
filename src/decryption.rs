@@ -17,9 +17,9 @@ use crate::{
 };
 
 pub fn agg_dec<E: Pairing>(
-    partial_decryptions: &Vec<E::G2>, //insert 0 if a party did not respond or verification failed
+    partial_decryptions: &[E::G2], //insert 0 if a party did not respond or verification failed
     ct: &Ciphertext<E>,
-    selector: &Vec<bool>,
+    selector: &[bool],
     agg_key: &AggregateKey<E>,
     params: &UniversalParams<E>,
 ) -> PairingOutput<E> {
@@ -46,7 +46,7 @@ pub fn agg_dec<E: Pairing>(
     debug_assert!(b.evaluate(&domain_elements[0]) == E::ScalarField::one());
 
     // commit to b in g2
-    let b_g2: E::G2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(&params, &b)
+    let b_g2: E::G2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(params, &b)
         .unwrap()
         .into();
 
@@ -60,7 +60,7 @@ pub fn agg_dec<E: Pairing>(
         DensePolynomial::from_coefficients_vec(vec![-domain_elements[0], E::ScalarField::one()]);
     let q0 = bminus1.div(&xminus1);
 
-    let q0_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(&params, &q0)
+    let q0_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(params, &q0)
         .unwrap()
         .into();
 
@@ -71,7 +71,7 @@ pub fn agg_dec<E: Pairing>(
     let bhat = DensePolynomial::from_coefficients_vec(bhat_coeffs);
     debug_assert_eq!(bhat.degree(), n - 1);
 
-    let bhat_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(&params, &bhat)
+    let bhat_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(params, &bhat)
         .unwrap()
         .into();
 
