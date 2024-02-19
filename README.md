@@ -1,6 +1,6 @@
-# Silent Threshold Encryption [ePrint:2023/XXX](https://eprint.iacr.org/2023/XXX)
+# Silent Threshold Encryption [ePrint:2024/263](https://eprint.iacr.org/2024/263)
 
-Rust implementation of the silent-threshold encryption introduced in [ePrint:2023/XXX](https://eprint.iacr.org/2023/XXX).
+Rust implementation of the silent-threshold encryption introduced in [ePrint:2024/263](https://eprint.iacr.org/2024/263).
 
 Use ```cargo bench``` to benchmark `setup`, `encryption`, and `decryption`.
 
