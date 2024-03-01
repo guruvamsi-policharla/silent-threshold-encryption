@@ -69,6 +69,8 @@ impl<E: Pairing> SecretKey<E> {
     }
 
     pub fn get_pk(&self, id: usize, params: &UniversalParams<E>, n: usize) -> PublicKey<E> {
+        // TODO: This runs in quadratic time because we are not preprocessing the Li's
+        // Fix this.
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
 
         let li = lagrange_poly(n, id);
