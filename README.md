@@ -2,9 +2,19 @@
 
 Rust implementation of the silent-threshold encryption introduced in [ePrint:2024/263](https://eprint.iacr.org/2024/263).
 
-Use ```cargo bench``` to benchmark `setup`, `encryption`, and `decryption`.
+## Dependencies
+Install rust via:
+
+```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
+
+## Benchmarking
+Use ```cargo bench``` to benchmark `setup`, `encryption`, and `decryption`. This is expected to take approximately 20 minutes.
 
 Use ```cargo run --example endtoend``` to check correctness of the implementation.
+
+The results are saved in the `target/criterion` directory. A concise HTML report is generated in `target/criterion/index.html` and can be viewed on a browser (Google Chrome recommended).
+
+If you wish to benchmark for a different set of parameters, you can modify the files in the `benches/` directory. 
 
 **WARNING:** This is an academic proof-of-concept prototype, and in particular has not received careful code review. This implementation is NOT ready for production use.
 
