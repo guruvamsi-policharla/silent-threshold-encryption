@@ -1,15 +1,14 @@
 use ark_ec::pairing::PairingOutput;
 // use crate::utils::{lagrange_coefficients, transpose};
-use ark_ec::{pairing::Pairing, Group};
-use ark_poly::DenseUVPolynomial;
-use ark_poly::{domain::EvaluationDomain, univariate::DensePolynomial, Radix2EvaluationDomain};
-use ark_serialize::*;
-use ark_std::{rand::RngCore, One, UniformRand, Zero};
-use std::ops::{Mul, Sub};
-
 use crate::encryption::Ciphertext;
 use crate::kzg::{UniversalParams, KZG10};
-use crate::utils::lagrange_poly;
+use ark_ec::{pairing::Pairing, Group};
+use ark_poly::univariate::DensePolynomial;
+use ark_poly::DenseUVPolynomial;
+use ark_serialize::*;
+use ark_std::{rand::RngCore, One, UniformRand, Zero};
+use rayon::iter::IntoParallelIterator as _;
+use rayon::iter::ParallelIterator;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SecretKey<E: Pairing> {
@@ -69,39 +68,28 @@ impl<E: Pairing> SecretKey<E> {
     }
 
     pub fn get_pk(&self, id: usize, params: &UniversalParams<E>, n: usize) -> PublicKey<E> {
-        // TODO: This runs in quadratic time because we are not preprocessing the Li's
-        // Fix this.
-        let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
+        let sk_li_by_z = (0..n)
+            .into_par_iter()
+            .map(|j| {
+                let li_by_z = if params.li_by_z.contains_key(&(id, j)) {
+                    params.li_by_z[&(id, j)]
+                } else {
+                    params.li_by_z[&(j, id)]
+                };
 
-        let li = lagrange_poly(n, id);
+                li_by_z * self.sk
+            })
+            .collect::<Vec<_>>();
 
-        let mut sk_li_by_z = vec![];
-        for j in 0..n {
-            let num = if id == j {
-                li.clone().mul(&li).sub(&li)
-            } else {
-                //cross-terms
-                let l_j = lagrange_poly(n, j);
-                l_j.mul(&li)
-            };
+        let li = &params.l_i[id];
 
-            let f = num.divide_by_vanishing_poly(domain).unwrap().0;
-            let sk_times_f = &f * self.sk;
-
-            let com = KZG10::commit_g1(params, &sk_times_f)
-                .expect("commitment failed")
-                .into();
-
-            sk_li_by_z.push(com);
-        }
-
-        let f = DensePolynomial::from_coefficients_vec(li.coeffs[1..].to_vec());
+        let f = DensePolynomial::<E::ScalarField>::from_coefficients_vec(li.coeffs[1..].to_vec());
         let sk_times_f = &f * self.sk;
         let sk_li_by_tau = KZG10::commit_g1(params, &sk_times_f)
             .expect("commitment failed")
             .into();
 
-        let mut f = &li * self.sk;
+        let mut f = li * self.sk;
         let sk_li = KZG10::commit_g1(params, &f)
             .expect("commitment failed")
             .into();
@@ -163,13 +151,12 @@ mod tests {
     use super::*;
 
     type E = ark_bls12_381::Bls12_381;
-    type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
     fn test_setup() {
         let mut rng = ark_std::test_rng();
         let n = 4;
-        let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
+        let params = KZG10::<E>::setup(n, &mut rng).unwrap();
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();

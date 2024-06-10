@@ -46,9 +46,7 @@ pub fn agg_dec<E: Pairing>(
     debug_assert!(b.evaluate(&domain_elements[0]) == E::ScalarField::one());
 
     // commit to b in g2
-    let b_g2: E::G2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(params, &b)
-        .unwrap()
-        .into();
+    let b_g2: E::G2 = KZG10::<E>::commit_g2(params, &b).unwrap().into();
 
     // q0 = (b-1)/(x-domain_elements[0])
     let mut bminus1 = b.clone();
@@ -60,9 +58,7 @@ pub fn agg_dec<E: Pairing>(
         DensePolynomial::from_coefficients_vec(vec![-domain_elements[0], E::ScalarField::one()]);
     let q0 = bminus1.div(&xminus1);
 
-    let q0_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(params, &q0)
-        .unwrap()
-        .into();
+    let q0_g1: E::G1 = KZG10::<E>::commit_g1(params, &q0).unwrap().into();
 
     // bhat = x^t * b
     // insert t 0s at the beginning of bhat.coeffs
@@ -71,9 +67,7 @@ pub fn agg_dec<E: Pairing>(
     let bhat = DensePolynomial::from_coefficients_vec(bhat_coeffs);
     debug_assert_eq!(bhat.degree(), n - 1);
 
-    let bhat_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(params, &bhat)
-        .unwrap()
-        .into();
+    let bhat_g1: E::G1 = KZG10::<E>::commit_g1(params, &bhat).unwrap().into();
 
     let n_inv = E::ScalarField::one() / E::ScalarField::from((n) as u32);
 
@@ -155,11 +149,9 @@ mod tests {
         kzg::KZG10,
         setup::{PublicKey, SecretKey},
     };
-    use ark_poly::univariate::DensePolynomial;
 
     type E = ark_bls12_381::Bls12_381;
     type G2 = <E as Pairing>::G2;
-    type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
     fn test_decryption() {
@@ -168,7 +160,7 @@ mod tests {
         let t: usize = n / 2;
         debug_assert!(t < n);
 
-        let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
+        let params = KZG10::<E>::setup(n, &mut rng).unwrap();
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();

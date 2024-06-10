@@ -1,5 +1,4 @@
 use ark_ec::pairing::Pairing;
-use ark_poly::univariate::DensePolynomial;
 use ark_std::Zero;
 use silent_threshold::{
     decryption::agg_dec,
@@ -10,7 +9,6 @@ use silent_threshold::{
 
 type E = ark_bls12_381::Bls12_381;
 type G2 = <E as Pairing>::G2;
-type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
 fn main() {
     let mut rng = ark_std::test_rng();
@@ -18,7 +16,7 @@ fn main() {
     let t: usize = 9;
     debug_assert!(t < n);
 
-    let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
+    let params = KZG10::<E>::setup(n, &mut rng).unwrap();
 
     let mut sk: Vec<SecretKey<E>> = Vec::new();
     let mut pk: Vec<PublicKey<E>> = Vec::new();
