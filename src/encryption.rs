@@ -102,18 +102,16 @@ mod tests {
         kzg::KZG10,
         setup::{PublicKey, SecretKey},
     };
-    use ark_poly::univariate::DensePolynomial;
 
     type E = ark_bls12_381::Bls12_381;
     type G1 = <E as Pairing>::G1;
     type G2 = <E as Pairing>::G2;
-    type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
     fn test_encryption() {
         let mut rng = ark_std::test_rng();
         let n = 8;
-        let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
+        let params = KZG10::<E>::setup(n, &mut rng).unwrap();
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();
