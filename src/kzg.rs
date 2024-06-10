@@ -53,9 +53,6 @@ pub enum Error {
 impl<E> KZG10<E>
 where
     E: Pairing,
-    // P: DenseUVPolynomial<E::ScalarField, Point = E::ScalarField>,
-    // for<'a, 'b> &'a P: Div<&'b P, Output = P>,
-    // for<'a, 'b> &'a P: Sub<&'b P, Output = P>,
 {
     pub fn setup<R: RngCore>(max_degree: usize, rng: &mut R) -> Result<UniversalParams<E>, Error> {
         if max_degree < 1 {
