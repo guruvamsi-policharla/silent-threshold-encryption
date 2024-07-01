@@ -18,11 +18,13 @@ fn main() {
     let t: usize = 9;
     debug_assert!(t < n);
 
+    println!("Setting up KZG parameters");
     let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
 
+    println!("Setting up key pairs for {} parties", n);
     let mut sk: Vec<SecretKey<E>> = Vec::new();
     let mut pk: Vec<PublicKey<E>> = Vec::new();
-
+    
     // create the dummy party's keys
     sk.push(SecretKey::<E>::new(&mut rng));
     sk[0].nullify();
@@ -33,9 +35,13 @@ fn main() {
         pk.push(sk[i].get_pk(i, &params, n))
     }
 
+    println!("Compting the aggregate key");
     let agg_key = AggregateKey::<E>::new(pk, &params);
+
+    println!("Encrypting a message");
     let ct = encrypt::<E>(&agg_key, t, &params);
 
+    println!("Computing partial decryptions");
     // compute partial decryptions
     let mut partial_decryptions: Vec<G2> = Vec::new();
     for i in 0..t + 1 {
@@ -45,6 +51,7 @@ fn main() {
         partial_decryptions.push(G2::zero());
     }
 
+    println!("Aggregating partial decryptions and decrypting");
     // compute the decryption key
     let mut selector: Vec<bool> = Vec::new();
     for _ in 0..t + 1 {
