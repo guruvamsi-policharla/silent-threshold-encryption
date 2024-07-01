@@ -10,6 +10,8 @@ Install rust via:
 ```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
 
 ## Benchmarking
+The library can be built using ```cargo build --release```.
+
 Use ```cargo bench``` to benchmark `setup` (KeyGen in the paper), `encryption`, and `decryption`. This is expected to take approximately 20 minutes. To run a specific benchmark, use ```cargo bench --bench <bench_name>```.
 
 Use ```cargo run --example endtoend``` to check correctness of the implementation.
