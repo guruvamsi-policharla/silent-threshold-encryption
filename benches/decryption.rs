@@ -36,8 +36,6 @@ fn bench_decrypt(c: &mut Criterion) {
             pk.push(sk[i].get_pk(i, &params, n));
         }
 
-        println!("Setup keys!");
-
         let agg_key = AggregateKey::<E>::new(pk, &params);
         let ct = encrypt::<E>(&agg_key, t, &params);
 

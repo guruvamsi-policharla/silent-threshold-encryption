@@ -48,9 +48,6 @@ pub fn encrypt<E: Pairing>(
     let g = params.powers_of_g[0];
     let h = params.powers_of_h[0];
 
-    // todo: avoid benchmarking this
-    // let e_gh = E::pairing(g, h);
-
     let mut sa1 = [E::G1::generator(); 2];
     let mut sa2 = [E::G2::generator(); 6];
 
