@@ -15,10 +15,10 @@ pub struct KZG10<E: Pairing, P: DenseUVPolynomial<E::ScalarField>> {
     _poly: PhantomData<P>,
 }
 
-pub struct UniversalParams<E: Pairing> {
-    /// Group elements of the form `{ \beta^i G }`, where `i` ranges from 0 to `degree`.
+pub struct PowersOfTau<E: Pairing> {
+    /// Group elements of the form `{ \tau^i G }`, where `i` ranges from 0 to `degree`.
     pub powers_of_g: Vec<E::G1Affine>,
-    /// Group elements of the form `{ \beta^i H }`, where `i` ranges from 0 to `degree`.
+    /// Group elements of the form `{ \tau^i H }`, where `i` ranges from 0 to `degree`.
     pub powers_of_h: Vec<E::G2Affine>,
 }
 
@@ -45,22 +45,21 @@ where
     for<'a, 'b> &'a P: Div<&'b P, Output = P>,
     for<'a, 'b> &'a P: Sub<&'b P, Output = P>,
 {
-    pub fn setup<R: RngCore>(max_degree: usize, rng: &mut R) -> Result<UniversalParams<E>, Error> {
+    pub fn setup(max_degree: usize, tau: E::ScalarField) -> Result<PowersOfTau<E>, Error> {
         if max_degree < 1 {
             return Err(Error::DegreeIsZero);
         }
 
         //let setup_time = start_timer!(|| format!("KZG10::Setup with degree {}", max_degree));
-        let beta = E::ScalarField::rand(rng);
         let g = E::G1::generator();
         let h = E::G2::generator();
 
-        let mut powers_of_beta = vec![E::ScalarField::one()];
+        let mut powers_of_tau = vec![E::ScalarField::one()];
 
-        let mut cur = beta;
+        let mut cur = tau;
         for _ in 0..max_degree {
-            powers_of_beta.push(cur);
-            cur *= &beta;
+            powers_of_tau.push(cur);
+            cur *= &tau;
         }
 
         let window_size = FixedBase::get_mul_window_size(max_degree + 1);
@@ -68,16 +67,16 @@ where
 
         let g_table = FixedBase::get_window_table(scalar_bits, window_size, g);
         let powers_of_g =
-            FixedBase::msm::<E::G1>(scalar_bits, window_size, &g_table, &powers_of_beta);
+            FixedBase::msm::<E::G1>(scalar_bits, window_size, &g_table, &powers_of_tau);
 
         let h_table = FixedBase::get_window_table(scalar_bits, window_size, h);
         let powers_of_h =
-            FixedBase::msm::<E::G2>(scalar_bits, window_size, &h_table, &powers_of_beta);
+            FixedBase::msm::<E::G2>(scalar_bits, window_size, &h_table, &powers_of_tau);
 
         let powers_of_g = E::G1::normalize_batch(&powers_of_g);
         let powers_of_h = E::G2::normalize_batch(&powers_of_h);
 
-        let pp = UniversalParams {
+        let pp = PowersOfTau {
             powers_of_g,
             powers_of_h,
         };
@@ -86,7 +85,7 @@ where
         Ok(pp)
     }
 
-    pub fn commit_g1(params: &UniversalParams<E>, polynomial: &P) -> Result<E::G1Affine, Error> {
+    pub fn commit_g1(params: &PowersOfTau<E>, polynomial: &P) -> Result<E::G1Affine, Error> {
         let d = polynomial.degree();
         check_degree_is_too_large(d, params.powers_of_g.len())?;
 
@@ -99,7 +98,7 @@ where
         Ok(commitment.into_affine())
     }
 
-    pub fn commit_g2(params: &UniversalParams<E>, polynomial: &P) -> Result<E::G2Affine, Error> {
+    pub fn commit_g2(params: &PowersOfTau<E>, polynomial: &P) -> Result<E::G2Affine, Error> {
         let d = polynomial.degree();
         check_degree_is_too_large(d, params.powers_of_h.len())?;
 
@@ -114,7 +113,7 @@ where
     }
 
     pub fn compute_opening_proof(
-        params: &UniversalParams<E>,
+        params: &PowersOfTau<E>,
         polynomial: &P,
         point: &E::ScalarField,
     ) -> Result<E::G1Affine, Error> {

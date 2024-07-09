@@ -1,6 +1,6 @@
 use std::ops::Mul;
 
-use crate::{kzg::UniversalParams, setup::AggregateKey};
+use crate::{kzg::PowersOfTau, setup::AggregateKey};
 use ark_ec::{
     pairing::{Pairing, PairingOutput},
     Group,
@@ -39,7 +39,7 @@ impl<E: Pairing> Ciphertext<E> {
 pub fn encrypt<E: Pairing>(
     apk: &AggregateKey<E>,
     t: usize,
-    params: &UniversalParams<E>,
+    params: &PowersOfTau<E>,
 ) -> Ciphertext<E> {
     let mut rng = ark_std::test_rng();
     let gamma = E::ScalarField::rand(&mut rng);
@@ -100,17 +100,20 @@ mod tests {
         setup::{PublicKey, SecretKey},
     };
     use ark_poly::univariate::DensePolynomial;
+    use ark_std::UniformRand;
 
     type E = ark_bls12_381::Bls12_381;
     type G1 = <E as Pairing>::G1;
     type G2 = <E as Pairing>::G2;
+    type Fr = <E as Pairing>::ScalarField;
     type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
     fn test_encryption() {
         let mut rng = ark_std::test_rng();
         let n = 8;
-        let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
+        let tau = Fr::rand(&mut rng);
+        let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();

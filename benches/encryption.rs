@@ -1,5 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
+use ark_std::UniformRand;
 use criterion::{criterion_group, criterion_main, Criterion};
 use silent_threshold::{
     encryption::encrypt,
@@ -8,13 +9,15 @@ use silent_threshold::{
 };
 
 type E = ark_bls12_381::Bls12_381;
+type Fr = <E as Pairing>::ScalarField;
 type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
 fn bench_encrypt(c: &mut Criterion) {
     let mut rng = ark_std::test_rng();
     let n = 8;
     let t = 2;
-    let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
+    let tau = Fr::rand(&mut rng);
+    let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
 
     let mut sk: Vec<SecretKey<E>> = Vec::new();
     let mut pk: Vec<PublicKey<E>> = Vec::new();
