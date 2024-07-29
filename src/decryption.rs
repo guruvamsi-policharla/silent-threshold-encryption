@@ -11,7 +11,7 @@ use std::ops::Div;
 
 use crate::{
     encryption::Ciphertext,
-    kzg::{UniversalParams, KZG10},
+    kzg::{PowersOfTau, KZG10},
     setup::AggregateKey,
     utils::interp_mostly_zero,
 };
@@ -21,7 +21,7 @@ pub fn agg_dec<E: Pairing>(
     ct: &Ciphertext<E>,
     selector: &[bool],
     agg_key: &AggregateKey<E>,
-    params: &UniversalParams<E>,
+    params: &PowersOfTau<E>,
 ) -> PairingOutput<E> {
     let n = agg_key.pk.len();
     let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
@@ -101,7 +101,7 @@ pub fn agg_dec<E: Pairing>(
     let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
     let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        bases.push(agg_key.pk[i].sk_li_by_tau.into());
+        bases.push(agg_key.pk[i].sk_li_x.into());
         scalars.push(b_evals[i]);
     }
     let qx = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
@@ -109,7 +109,7 @@ pub fn agg_dec<E: Pairing>(
     let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
     let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        bases.push(agg_key.agg_sk_li_by_z[i].into());
+        bases.push(agg_key.agg_sk_li_lj_z[i].into());
         scalars.push(b_evals[i]);
     }
     let qz = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
@@ -142,7 +142,7 @@ pub fn agg_dec<E: Pairing>(
 
     let enc_key = E::multi_pairing(enc_key_lhs, enc_key_rhs);
 
-    debug_assert_eq!(enc_key, ct.enc_key);
+    assert_eq!(enc_key, ct.enc_key);
 
     enc_key
 }
@@ -156,9 +156,11 @@ mod tests {
         setup::{PublicKey, SecretKey},
     };
     use ark_poly::univariate::DensePolynomial;
+    use ark_std::UniformRand;
 
     type E = ark_bls12_381::Bls12_381;
     type G2 = <E as Pairing>::G2;
+    type Fr = <E as Pairing>::ScalarField;
     type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
@@ -168,7 +170,8 @@ mod tests {
         let t: usize = n / 2;
         debug_assert!(t < n);
 
-        let params = KZG10::<E, UniPoly381>::setup(n, &mut rng).unwrap();
+        let tau = Fr::rand(&mut rng);
+        let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();
