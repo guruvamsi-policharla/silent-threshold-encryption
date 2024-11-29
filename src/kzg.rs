@@ -7,6 +7,7 @@ use ark_ec::{pairing::Pairing, CurveGroup, PrimeGroup};
 use ark_ec::{scalar_mul::ScalarMul, VariableBaseMSM};
 use ark_ff::{One, PrimeField, UniformRand, Zero};
 use ark_poly::DenseUVPolynomial;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{format, marker::PhantomData, ops::*, vec};
 
 use ark_std::rand::RngCore;
@@ -16,6 +17,7 @@ pub struct KZG10<E: Pairing, P: DenseUVPolynomial<E::ScalarField>> {
     _poly: PhantomData<P>,
 }
 
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct PowersOfTau<E: Pairing> {
     /// Group elements of the form `{ \tau^i G }`, where `i` ranges from 0 to `degree`.
     pub powers_of_g: Vec<E::G1Affine>,
