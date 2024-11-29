@@ -2,7 +2,7 @@ use ark_ec::pairing::Pairing;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::One;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use silent_threshold::utils::interp_mostly_zero;
+use silent_threshold_encryption::utils::interp_mostly_zero;
 
 type E = ark_bls12_381::Bls12_381;
 type F = <E as Pairing>::ScalarField;

@@ -3,7 +3,7 @@ use ark_ec::pairing::PairingOutput;
 use crate::encryption::Ciphertext;
 use crate::kzg::{PowersOfTau, KZG10};
 use crate::utils::lagrange_poly;
-use ark_ec::{pairing::Pairing, Group};
+use ark_ec::{pairing::Pairing, PrimeGroup};
 use ark_ff::Field;
 use ark_poly::{
     domain::EvaluationDomain, univariate::DensePolynomial, DenseUVPolynomial, Polynomial,
@@ -148,7 +148,7 @@ impl<E: Pairing> SecretKey<E> {
                 l_j.mul(&li)
             };
 
-            let f = num.divide_by_vanishing_poly(domain).unwrap().0;
+            let f = num.divide_by_vanishing_poly(domain).0;
             let sk_times_f = &f * self.sk;
 
             let com = KZG10::commit_g1(params, &sk_times_f)
