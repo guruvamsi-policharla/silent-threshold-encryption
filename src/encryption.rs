@@ -3,7 +3,7 @@ use std::ops::Mul;
 use crate::{kzg::PowersOfTau, setup::AggregateKey};
 use ark_ec::{
     pairing::{Pairing, PairingOutput},
-    Group,
+    PrimeGroup,
 };
 use ark_serialize::*;
 use ark_std::{UniformRand, Zero};

@@ -2,7 +2,7 @@ use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
 use ark_std::UniformRand;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use silent_threshold::{
+use silent_threshold_encryption::{
     kzg::KZG10,
     setup::{LagrangePowers, SecretKey},
 };

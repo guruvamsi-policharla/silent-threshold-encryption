@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
 use ark_std::{UniformRand, Zero};
-use silent_threshold::{
+use silent_threshold_encryption::{
     decryption::agg_dec,
     encryption::encrypt,
     kzg::KZG10,

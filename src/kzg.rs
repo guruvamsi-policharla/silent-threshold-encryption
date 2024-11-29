@@ -2,8 +2,9 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use ark_ec::{pairing::Pairing, CurveGroup, Group};
-use ark_ec::{scalar_mul::fixed_base::FixedBase, VariableBaseMSM};
+use ark_ec::scalar_mul::*;
+use ark_ec::{pairing::Pairing, CurveGroup, PrimeGroup};
+use ark_ec::{scalar_mul::ScalarMul, VariableBaseMSM};
 use ark_ff::{One, PrimeField, UniformRand, Zero};
 use ark_poly::DenseUVPolynomial;
 use ark_std::{format, marker::PhantomData, ops::*, vec};
@@ -50,31 +51,20 @@ where
             return Err(Error::DegreeIsZero);
         }
 
-        //let setup_time = start_timer!(|| format!("KZG10::Setup with degree {}", max_degree));
+        // let setup_time = start_timer!(|| format!("KZG10::Setup with degree {}", max_degree));
         let g = E::G1::generator();
         let h = E::G2::generator();
 
         let mut powers_of_tau = vec![E::ScalarField::one()];
 
         let mut cur = tau;
-        for _ in 0..max_degree {
+        for _ in 0..=max_degree {
             powers_of_tau.push(cur);
             cur *= &tau;
         }
 
-        let window_size = FixedBase::get_mul_window_size(max_degree + 1);
-        let scalar_bits = E::ScalarField::MODULUS_BIT_SIZE as usize;
-
-        let g_table = FixedBase::get_window_table(scalar_bits, window_size, g);
-        let powers_of_g =
-            FixedBase::msm::<E::G1>(scalar_bits, window_size, &g_table, &powers_of_tau);
-
-        let h_table = FixedBase::get_window_table(scalar_bits, window_size, h);
-        let powers_of_h =
-            FixedBase::msm::<E::G2>(scalar_bits, window_size, &h_table, &powers_of_tau);
-
-        let powers_of_g = E::G1::normalize_batch(&powers_of_g);
-        let powers_of_h = E::G2::normalize_batch(&powers_of_h);
+        let powers_of_g = g.batch_mul(&powers_of_tau[0..max_degree + 1]);
+        let powers_of_h = h.batch_mul(&powers_of_tau[0..max_degree + 1]);
 
         let pp = PowersOfTau {
             powers_of_g,
