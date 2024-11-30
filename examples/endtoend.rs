@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
-use ark_std::{UniformRand, Zero};
+use ark_std::{test_rng, UniformRand, Zero};
 use silent_threshold_encryption::{
     decryption::agg_dec,
     encryption::encrypt,
@@ -12,6 +12,10 @@ type E = ark_bls12_381::Bls12_381;
 type G2 = <E as Pairing>::G2;
 type Fr = <E as Pairing>::ScalarField;
 type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
+use rand::{
+    seq::{IteratorRandom, SliceRandom},
+    thread_rng,
+};
 
 fn main() {
     let mut rng = ark_std::test_rng();
@@ -47,26 +51,22 @@ fn main() {
     let ct = encrypt::<E>(&agg_key, t, &kzg_params);
 
     println!("Computing partial decryptions");
-    // compute partial decryptions
-    let mut partial_decryptions: Vec<G2> = Vec::new();
-    for i in 0..t + 1 {
-        partial_decryptions.push(sk[i].partial_decryption(&ct));
-    }
-    for _ in t + 1..n {
-        partial_decryptions.push(G2::zero());
+
+    // sample t random signers from 1..n
+    let mut rng = thread_rng(); // Create a random number generator
+    let signers = (1..n).choose_multiple(&mut rng, t);
+
+    let mut selector: Vec<bool> = vec![false; n];
+    let mut partial_decryptions: Vec<G2> = vec![G2::zero(); n];
+    selector[0] = true;
+    partial_decryptions[0] = sk[0].partial_decryption(&ct);
+    for i in signers {
+        selector[i] = true;
+        partial_decryptions[i] = sk[i].partial_decryption(&ct);
     }
 
     println!("Aggregating partial decryptions and decrypting");
-    // compute the decryption key
-    let mut selector: Vec<bool> = Vec::new();
-    for _ in 0..t + 1 {
-        selector.push(true);
-    }
-    for _ in t + 1..n {
-        selector.push(false);
-    }
-
-    let _dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &kzg_params);
-
+    let dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &kzg_params);
+    assert_eq!(dec_key, ct.enc_key, "Decryption failed!");
     println!("Decryption successful!");
 }
