@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
-use ark_std::{test_rng, UniformRand, Zero};
+use ark_std::{UniformRand, Zero};
 use silent_threshold_encryption::{
     decryption::agg_dec,
     encryption::encrypt,
@@ -12,10 +12,7 @@ type E = ark_bls12_381::Bls12_381;
 type G2 = <E as Pairing>::G2;
 type Fr = <E as Pairing>::ScalarField;
 type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    thread_rng,
-};
+use rand::{seq::IteratorRandom, thread_rng};
 
 fn main() {
     let mut rng = ark_std::test_rng();

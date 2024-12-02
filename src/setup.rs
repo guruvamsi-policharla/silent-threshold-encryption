@@ -13,7 +13,7 @@ use ark_serialize::*;
 use ark_std::{rand::RngCore, One, UniformRand, Zero};
 use std::ops::{Mul, Sub};
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
 pub struct LagrangePowers<E: Pairing> {
     pub li: Vec<E::G1>,
     pub li_minus0: Vec<E::G1>,
@@ -74,12 +74,12 @@ impl<E: Pairing> LagrangePowers<E> {
     }
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
 pub struct SecretKey<E: Pairing> {
     sk: E::ScalarField,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
 pub struct PublicKey<E: Pairing> {
     pub id: usize,
     pub bls_pk: E::G1,          //BLS pk
@@ -89,6 +89,7 @@ pub struct PublicKey<E: Pairing> {
     pub sk_li_x: E::G1,         //hint
 }
 
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
 pub struct AggregateKey<E: Pairing> {
     pub pk: Vec<PublicKey<E>>,
     pub agg_sk_li_lj_z: Vec<E::G1>,
