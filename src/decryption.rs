@@ -64,12 +64,12 @@ pub fn agg_dec<E: Pairing>(
         .unwrap()
         .into();
 
-    // bhat = x^t * b
-    // insert t 0s at the beginning of bhat.coeffs
-    let mut bhat_coeffs = vec![E::ScalarField::zero(); ct.t];
+    // bhat = x^{t+1} * b
+    // insert t+1 0s at the beginning of bhat.coeffs
+    let mut bhat_coeffs = vec![E::ScalarField::zero(); ct.t + 1];
     bhat_coeffs.append(&mut b.coeffs.clone());
     let bhat = DensePolynomial::from_coefficients_vec(bhat_coeffs);
-    debug_assert_eq!(bhat.degree(), n - 1);
+    debug_assert_eq!(bhat.degree(), n);
 
     let bhat_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(params, &bhat)
         .unwrap()
