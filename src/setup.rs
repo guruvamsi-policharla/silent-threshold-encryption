@@ -11,6 +11,7 @@ use ark_poly::{
 };
 use ark_serialize::*;
 use ark_std::{rand::RngCore, One, UniformRand, Zero};
+use rayon::prelude::*;
 use std::ops::{Mul, Sub};
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
@@ -45,25 +46,25 @@ impl<E: Pairing> LagrangePowers<E> {
         }
 
         let mut li_minus0 = vec![E::G1::zero(); n];
-        for i in 0..n {
-            li_minus0[i] = E::G1::generator() * li_evals_minus0[i];
-        }
+        li_minus0.par_iter_mut().enumerate().for_each(|(i, elem)| {
+            *elem = E::G1::generator() * li_evals_minus0[i];
+        });
 
         let mut li_x = vec![E::G1::zero(); n];
-        for i in 0..n {
-            li_x[i] = E::G1::generator() * li_evals_x[i];
-        }
+        li_x.par_iter_mut().enumerate().for_each(|(i, elem)| {
+            *elem = E::G1::generator() * li_evals_x[i];
+        });
 
         let mut li_lj_z = vec![vec![E::G1::zero(); n]; n];
-        for i in 0..n {
-            for j in 0..n {
-                li_lj_z[i][j] = if i == j {
+        li_lj_z.par_iter_mut().enumerate().for_each(|(i, row)| {
+            row.par_iter_mut().enumerate().for_each(|(j, elem)| {
+                *elem = if i == j {
                     E::G1::generator() * ((li_evals[i] * li_evals[i] - li_evals[i]) * z_eval_inv)
                 } else {
                     E::G1::generator() * (li_evals[i] * li_evals[j] * z_eval_inv)
                 }
-            }
-        }
+            });
+        });
 
         LagrangePowers {
             li,
@@ -79,7 +80,7 @@ pub struct SecretKey<E: Pairing> {
     sk: E::ScalarField,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Default, Debug)]
 pub struct PublicKey<E: Pairing> {
     pub id: usize,
     pub bls_pk: E::G1,          //BLS pk

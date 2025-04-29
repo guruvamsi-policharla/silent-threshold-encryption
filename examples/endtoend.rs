@@ -1,56 +1,62 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::univariate::DensePolynomial;
-use ark_std::{UniformRand, Zero};
+use ark_std::{end_timer, start_timer, UniformRand, Zero};
 use silent_threshold_encryption::{
     decryption::agg_dec,
     encryption::encrypt,
     kzg::KZG10,
-    setup::{AggregateKey, LagrangePowers, PublicKey, SecretKey},
+    setup::{AggregateKey, LagrangePowers, SecretKey},
 };
 
 type E = ark_bls12_381::Bls12_381;
 type G2 = <E as Pairing>::G2;
 type Fr = <E as Pairing>::ScalarField;
 type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
-use rand::{seq::IteratorRandom, thread_rng};
+use rand::seq::IteratorRandom;
+use rayon::prelude::*;
 
 fn main() {
     let mut rng = ark_std::test_rng();
-    let n = 1 << 5; // actually n-1 total parties. one party is a dummy party that is always true
+    let n = 1 << 10; // actually n-1 total parties. one party is a dummy party that is always true
     let t: usize = 9;
     debug_assert!(t < n);
 
-    println!("Setting up KZG parameters");
+    let kzg_timer = start_timer!(|| "Setting up KZG parameters");
     let tau = Fr::rand(&mut rng);
     let kzg_params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
+    end_timer!(kzg_timer);
 
-    println!("Preprocessing lagrange powers");
+    let lagrange_params_timer = start_timer!(|| "Preprocessing lagrange powers");
     let lagrange_params = LagrangePowers::<E>::new(tau, n);
+    end_timer!(lagrange_params_timer);
 
     println!("Setting up key pairs for {} parties", n);
-    let mut sk: Vec<SecretKey<E>> = Vec::new();
-    let mut pk: Vec<PublicKey<E>> = Vec::new();
-
+    let key_timer = start_timer!(|| "Setting up keys");
     // create the dummy party's keys
-    sk.push(SecretKey::<E>::new(&mut rng));
+    let mut sk = (0..n)
+        .map(|_| SecretKey::<E>::new(&mut rng))
+        .collect::<Vec<_>>();
     sk[0].nullify();
-    pk.push(sk[0].lagrange_get_pk(0, &lagrange_params, n));
+    let mut pk = vec![sk[0].lagrange_get_pk(0, &lagrange_params, n); n];
 
-    for i in 1..n {
-        sk.push(SecretKey::<E>::new(&mut rng));
-        pk.push(sk[i].lagrange_get_pk(i, &lagrange_params, n))
-    }
+    pk.par_iter_mut().enumerate().for_each(|(i, pk_i)| {
+        if i > 0 {
+            *pk_i = sk[i].lagrange_get_pk(i, &lagrange_params, n);
+        }
+    });
+    end_timer!(key_timer);
 
-    println!("Compting the aggregate key");
+    let agg_key_timer = start_timer!(|| "Computing the aggregate key");
     let agg_key = AggregateKey::<E>::new(pk, &kzg_params);
+    end_timer!(agg_key_timer);
 
-    println!("Encrypting a message");
+    let enc_timer = start_timer!(|| "Encrypting a message");
     let ct = encrypt::<E>(&agg_key, t, &kzg_params);
+    end_timer!(enc_timer);
 
     println!("Computing partial decryptions");
-
     // sample t random signers from 1..n
-    let mut rng = thread_rng(); // Create a random number generator
+    let mut rng = rand::rng(); // Create a random number generator
     let signers = (1..n).choose_multiple(&mut rng, t);
 
     let mut selector: Vec<bool> = vec![false; n];
@@ -62,8 +68,9 @@ fn main() {
         partial_decryptions[i] = sk[i].partial_decryption(&ct);
     }
 
-    println!("Aggregating partial decryptions and decrypting");
+    let dec_timer = start_timer!(|| "Aggregating partial decryptions and decrypting");
     let dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &kzg_params);
+    end_timer!(dec_timer);
     assert_eq!(dec_key, ct.enc_key, "Decryption failed!");
     println!("Decryption successful!");
 }
