@@ -9,19 +9,14 @@ use ark_poly::{
 use ark_std::{One, Zero};
 use std::ops::Div;
 
-use crate::{
-    encryption::Ciphertext,
-    kzg::{PowersOfTau, KZG10},
-    setup::AggregateKey,
-    utils::interp_mostly_zero,
-};
+use crate::{crs::CRS, encryption::Ciphertext, setup::AggregateKey, utils::interp_mostly_zero};
 
 pub fn agg_dec<E: Pairing>(
     partial_decryptions: &[E::G2], //insert 0 if a party did not respond or verification failed
     ct: &Ciphertext<E>,
     selector: &[bool],
     agg_key: &AggregateKey<E>,
-    params: &PowersOfTau<E>,
+    crs: &CRS<E>,
 ) -> PairingOutput<E> {
     let n = agg_key.pk.len();
     let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
@@ -46,9 +41,7 @@ pub fn agg_dec<E: Pairing>(
     debug_assert!(b.evaluate(&domain_elements[0]) == E::ScalarField::one());
 
     // commit to b in g2
-    let b_g2: E::G2 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g2(params, &b)
-        .unwrap()
-        .into();
+    let b_g2: E::G2 = crs.commit_g2(&b.coeffs);
 
     // q0 = (b-1)/(x-domain_elements[0])
     let mut bminus1 = b.clone();
@@ -60,9 +53,7 @@ pub fn agg_dec<E: Pairing>(
         DensePolynomial::from_coefficients_vec(vec![-domain_elements[0], E::ScalarField::one()]);
     let q0 = bminus1.div(&xminus1);
 
-    let q0_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(params, &q0)
-        .unwrap()
-        .into();
+    let q0_g1: E::G1 = crs.commit_g1(&q0.coeffs);
 
     // bhat = x^{t+1} * b
     // insert t+1 0s at the beginning of bhat.coeffs
@@ -71,9 +62,7 @@ pub fn agg_dec<E: Pairing>(
     let bhat = DensePolynomial::from_coefficients_vec(bhat_coeffs);
     debug_assert_eq!(bhat.degree(), n);
 
-    let bhat_g1: E::G1 = KZG10::<E, DensePolynomial<E::ScalarField>>::commit_g1(params, &bhat)
-        .unwrap()
-        .into();
+    let bhat_g1: E::G1 = crs.commit_g1(&bhat.coeffs);
 
     let n_inv = E::ScalarField::one() / E::ScalarField::from((n) as u32);
 
@@ -151,17 +140,13 @@ pub fn agg_dec<E: Pairing>(
 mod tests {
     use super::*;
     use crate::{
+        crs::CRS,
         encryption::encrypt,
-        kzg::KZG10,
         setup::{PublicKey, SecretKey},
     };
-    use ark_poly::univariate::DensePolynomial;
-    use ark_std::UniformRand;
 
     type E = ark_bls12_381::Bls12_381;
     type G2 = <E as Pairing>::G2;
-    type Fr = <E as Pairing>::ScalarField;
-    type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
     fn test_decryption() {
@@ -170,8 +155,7 @@ mod tests {
         let t: usize = n / 2;
         debug_assert!(t < n);
 
-        let tau = Fr::rand(&mut rng);
-        let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
+        let crs = CRS::new(n, &mut rng);
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();
@@ -179,15 +163,15 @@ mod tests {
         // create the dummy party's keys
         sk.push(SecretKey::<E>::new(&mut rng));
         sk[0].nullify();
-        pk.push(sk[0].get_pk(0, &params, n));
+        pk.push(sk[0].get_pk(0, &crs, n));
 
         for i in 1..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(i, &params, n))
+            pk.push(sk[i].get_pk(i, &crs, n))
         }
 
-        let agg_key = AggregateKey::<E>::new(pk, &params);
-        let ct = encrypt::<E>(&agg_key, t, &params);
+        let agg_key = AggregateKey::<E>::new(pk, &crs);
+        let ct = encrypt::<E>(&agg_key, t, &crs);
 
         // compute partial decryptions
         let mut partial_decryptions: Vec<G2> = Vec::new();
@@ -207,6 +191,6 @@ mod tests {
             selector.push(false);
         }
 
-        let _dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &params);
+        let _dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &crs);
     }
 }

@@ -22,7 +22,7 @@ pub fn lagrange_poly<F: FftField>(n: usize, i: usize) -> DensePolynomial<F> {
 }
 
 /// interpolates a polynomial when all evaluations except at points[0] are zero
-/// todo: check that multiplication is fast as one polynomial is shorter
+/// todo: use faster interpolation
 pub fn interp_mostly_zero<F: Field>(eval: F, points: &Vec<F>) -> DensePolynomial<F> {
     if points.is_empty() {
         // threshold=n

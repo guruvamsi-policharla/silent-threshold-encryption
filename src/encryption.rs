@@ -1,12 +1,11 @@
-use std::ops::Mul;
-
-use crate::{kzg::PowersOfTau, setup::AggregateKey};
+use crate::{crs::CRS, setup::AggregateKey};
 use ark_ec::{
     pairing::{Pairing, PairingOutput},
     PrimeGroup,
 };
 use ark_serialize::*;
 use ark_std::{UniformRand, Zero};
+use std::ops::Mul;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct Ciphertext<E: Pairing> {
@@ -36,17 +35,13 @@ impl<E: Pairing> Ciphertext<E> {
 }
 
 /// t is the threshold for encryption and apk is the aggregated public key
-pub fn encrypt<E: Pairing>(
-    apk: &AggregateKey<E>,
-    t: usize,
-    params: &PowersOfTau<E>,
-) -> Ciphertext<E> {
+pub fn encrypt<E: Pairing>(apk: &AggregateKey<E>, t: usize, crs: &CRS<E>) -> Ciphertext<E> {
     let mut rng = ark_std::test_rng();
     let gamma = E::ScalarField::rand(&mut rng);
-    let gamma_g2 = params.powers_of_h[0] * gamma;
+    let gamma_g2 = crs.powers_of_h[0] * gamma;
 
-    let g = params.powers_of_g[0];
-    let h = params.powers_of_h[0];
+    let g = crs.powers_of_g[0];
+    let h = crs.powers_of_h[0];
 
     let mut sa1 = [E::G1::generator(); 2];
     let mut sa2 = [E::G2::generator(); 6];
@@ -57,7 +52,7 @@ pub fn encrypt<E: Pairing>(
         .for_each(|s| *s = E::ScalarField::rand(&mut rng));
 
     // sa1[0] = s0*ask + s3*g^{tau^{t+1}} + s4*g
-    sa1[0] = (apk.ask * s[0]) + (params.powers_of_g[t + 1] * s[3]) + (params.powers_of_g[0] * s[4]);
+    sa1[0] = (apk.ask * s[0]) + (crs.powers_of_g[t + 1] * s[3]) + (crs.powers_of_g[0] * s[4]);
 
     // sa1[1] = s2*g
     sa1[1] = g * s[2];
@@ -69,7 +64,7 @@ pub fn encrypt<E: Pairing>(
     sa2[1] = apk.z_g2 * s[0];
 
     // sa2[2] = s0*h^tau + s1*h^tau
-    sa2[2] = params.powers_of_h[1] * (s[0] + s[1]);
+    sa2[2] = crs.powers_of_h[1] * (s[0] + s[1]);
 
     // sa2[3] = s1*h
     sa2[3] = h * s[1];
@@ -78,7 +73,7 @@ pub fn encrypt<E: Pairing>(
     sa2[4] = h * s[3];
 
     // sa2[5] = s4*h^{tau - omega^0}
-    sa2[5] = (params.powers_of_h[1] + apk.h_minus1) * s[4];
+    sa2[5] = (crs.powers_of_h[1] + apk.h_minus1) * s[4];
 
     // enc_key = s4*e_gh
     let enc_key = apk.e_gh.mul(s[4]);
@@ -96,35 +91,30 @@ pub fn encrypt<E: Pairing>(
 mod tests {
     use super::*;
     use crate::{
-        kzg::KZG10,
+        crs::CRS,
         setup::{PublicKey, SecretKey},
     };
-    use ark_poly::univariate::DensePolynomial;
-    use ark_std::UniformRand;
 
     type E = ark_bls12_381::Bls12_381;
     type G1 = <E as Pairing>::G1;
     type G2 = <E as Pairing>::G2;
-    type Fr = <E as Pairing>::ScalarField;
-    type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
 
     #[test]
     fn test_encryption() {
         let mut rng = ark_std::test_rng();
         let n = 8;
-        let tau = Fr::rand(&mut rng);
-        let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
+        let crs = CRS::new(n, &mut rng);
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();
 
         for i in 0..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(0, &params, n))
+            pk.push(sk[i].get_pk(0, &crs, n))
         }
 
-        let ak = AggregateKey::<E>::new(pk, &params);
-        let ct = encrypt::<E>(&ak, 2, &params);
+        let ak = AggregateKey::<E>::new(pk, &crs);
+        let ct = encrypt::<E>(&ak, 2, &crs);
 
         let mut ct_bytes = Vec::new();
         ct.serialize_compressed(&mut ct_bytes).unwrap();
