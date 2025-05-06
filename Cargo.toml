@@ -30,9 +30,5 @@ name = "decryption"
 harness = false
 
 [[bench]]
-name = "interpolation"
-harness = false
-
-[[bench]]
 name = "setup"
 harness = false
