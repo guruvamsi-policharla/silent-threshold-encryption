@@ -32,7 +32,8 @@ fn bench_decrypt(c: &mut Criterion) {
             .collect::<Vec<_>>();
 
         let agg_key = AggregateKey::<E>::new(pk, &crs);
-        let ct = encrypt::<E>(&agg_key, t, &crs);
+        let msg = b"Hello, world!";
+        let ct = encrypt::<E>(&agg_key, t, &crs, msg);
 
         // compute partial decryptions
         let mut partial_decryptions: Vec<G2> = Vec::new();

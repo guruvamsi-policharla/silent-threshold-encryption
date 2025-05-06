@@ -24,8 +24,11 @@ fn bench_encrypt(c: &mut Criterion) {
         .collect::<Vec<_>>();
 
     let agg_key = AggregateKey::<E>::new(pk, &crs);
+    let msg = b"Hello, world!";
 
-    c.bench_function("encrypt", |b| b.iter(|| encrypt::<E>(&agg_key, t, &crs)));
+    c.bench_function("encrypt", |b| {
+        b.iter(|| encrypt::<E>(&agg_key, t, &crs, msg))
+    });
 }
 
 criterion_group!(benches, bench_encrypt);
