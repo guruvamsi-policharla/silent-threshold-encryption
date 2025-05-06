@@ -39,8 +39,10 @@ fn main() {
     let agg_key = AggregateKey::<E>::new(pk, &crs);
     end_timer!(agg_key_timer);
 
+    let msg = b"Hello, world!";
+
     let enc_timer = start_timer!(|| "Encrypting a message");
-    let ct = encrypt::<E>(&agg_key, t, &crs);
+    let ct = encrypt::<E>(&agg_key, t, &crs, msg);
     end_timer!(enc_timer);
 
     println!("Computing partial decryptions");
@@ -59,6 +61,6 @@ fn main() {
     let dec_timer = start_timer!(|| "Aggregating partial decryptions and decrypting");
     let dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &crs);
     end_timer!(dec_timer);
-    assert_eq!(dec_key, ct.enc_key, "Decryption failed!");
+    assert_eq!(dec_key, msg, "Decryption failed!");
     println!("Decryption successful!");
 }

@@ -1,41 +1,42 @@
 use crate::{crs::CRS, setup::AggregateKey};
-use ark_ec::{
-    pairing::{Pairing, PairingOutput},
-    PrimeGroup,
-};
+use ark_ec::{pairing::Pairing, PrimeGroup};
 use ark_serialize::*;
 use ark_std::UniformRand;
 use std::ops::Mul;
+
+use aes_gcm::{aead::Aead, Aes256Gcm, Key, KeyInit};
+use hkdf::Hkdf;
+use sha2::Sha256;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct Ciphertext<E: Pairing> {
     pub gamma_g2: E::G2,
     pub sa1: [E::G1; 2],
     pub sa2: [E::G2; 6],
-    pub enc_key: PairingOutput<E>, //key to be used for encapsulation
-    pub t: usize,                  //threshold
+    // pub enc_key: PairingOutput<E>, //key to be used for encapsulation
+    pub ct: Vec<u8>, //encrypted message
+    pub t: usize,    //threshold
 }
 
 impl<E: Pairing> Ciphertext<E> {
-    pub fn new(
-        gamma_g2: E::G2,
-        sa1: [E::G1; 2],
-        sa2: [E::G2; 6],
-        enc_key: PairingOutput<E>,
-        t: usize,
-    ) -> Self {
+    pub fn new(gamma_g2: E::G2, sa1: [E::G1; 2], sa2: [E::G2; 6], ct: Vec<u8>, t: usize) -> Self {
         Ciphertext {
             gamma_g2,
             sa1,
             sa2,
-            enc_key,
+            ct,
             t,
         }
     }
 }
 
 /// t is the threshold for encryption and apk is the aggregated public key
-pub fn encrypt<E: Pairing>(apk: &AggregateKey<E>, t: usize, crs: &CRS<E>) -> Ciphertext<E> {
+pub fn encrypt<E: Pairing>(
+    apk: &AggregateKey<E>,
+    t: usize,
+    crs: &CRS<E>,
+    m: &[u8],
+) -> Ciphertext<E> {
     let mut rng = ark_std::test_rng();
     let gamma = E::ScalarField::rand(&mut rng);
     let gamma_g2 = crs.powers_of_h[0] * gamma;
@@ -76,12 +77,26 @@ pub fn encrypt<E: Pairing>(apk: &AggregateKey<E>, t: usize, crs: &CRS<E>) -> Cip
 
     // enc_key = s4*e_gh
     let enc_key = apk.e_gh.mul(s[4]);
+    let mut enc_key_bytes = Vec::new();
+    enc_key.serialize_compressed(&mut enc_key_bytes).unwrap();
+
+    // derive an encapsulation key from enc_key using an HKDF
+    let hk = Hkdf::<Sha256>::new(None, &enc_key_bytes);
+    let mut aes_key = [0u8; 32];
+    let mut aes_nonce = [0u8; 12];
+    hk.expand(&[1], &mut aes_key).unwrap();
+    hk.expand(&[2], &mut aes_nonce).unwrap();
+
+    // encrypt the message m using the derived key
+    let aes_key: &Key<Aes256Gcm> = &aes_key.into();
+    let cipher = Aes256Gcm::new(&aes_key);
+    let ct = cipher.encrypt(&aes_nonce.into(), m).unwrap();
 
     Ciphertext {
         gamma_g2,
         sa1,
         sa2,
-        enc_key,
+        ct,
         t,
     }
 }
@@ -104,6 +119,8 @@ mod tests {
         let n = 8;
         let crs = CRS::new(n, &mut rng);
 
+        let msg = b"Hello, world!";
+
         let mut sk: Vec<SecretKey<E>> = Vec::new();
         let mut pk: Vec<PublicKey<E>> = Vec::new();
 
@@ -113,7 +130,7 @@ mod tests {
         }
 
         let ak = AggregateKey::<E>::new(pk, &crs);
-        let ct = encrypt::<E>(&ak, 2, &crs);
+        let ct = encrypt::<E>(&ak, 2, &crs, msg);
 
         let mut ct_bytes = Vec::new();
         ct.serialize_compressed(&mut ct_bytes).unwrap();

@@ -1,12 +1,14 @@
-use ark_ec::{
-    pairing::{Pairing, PairingOutput},
-    VariableBaseMSM,
-};
+use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
     Radix2EvaluationDomain,
 };
+use ark_serialize::CanonicalSerialize;
 use ark_std::{One, Zero};
+
+use aes_gcm::{aead::Aead, Aes256Gcm, Key, KeyInit};
+use hkdf::Hkdf;
+use sha2::Sha256;
 
 use crate::{crs::CRS, encryption::Ciphertext, setup::AggregateKey, utils::interp_mostly_zero};
 
@@ -16,7 +18,7 @@ pub fn agg_dec<E: Pairing>(
     selector: &[bool],
     agg_key: &AggregateKey<E>,
     crs: &CRS<E>,
-) -> PairingOutput<E> {
+) -> Vec<u8> {
     let n = agg_key.pk.len();
     let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
     let domain_elements: Vec<E::ScalarField> = domain.elements().collect();
@@ -124,10 +126,21 @@ pub fn agg_dec<E: Pairing>(
     enc_key_rhs.append(&mut w2.to_vec());
 
     let enc_key = E::multi_pairing(enc_key_lhs, enc_key_rhs);
+    let mut enc_key_bytes = Vec::new();
+    enc_key.serialize_compressed(&mut enc_key_bytes).unwrap();
 
-    assert_eq!(enc_key, ct.enc_key);
+    // derive an encapsulation key from enc_key using an HKDF
+    let hk = Hkdf::<Sha256>::new(None, &enc_key_bytes);
+    let mut aes_key = [0u8; 32];
+    let mut aes_nonce = [0u8; 12];
+    hk.expand(&[1], &mut aes_key).unwrap();
+    hk.expand(&[2], &mut aes_nonce).unwrap();
 
-    enc_key
+    // encrypt the message m using the derived key
+    let aes_key: &Key<Aes256Gcm> = &aes_key.into();
+    let cipher = Aes256Gcm::new(&aes_key);
+
+    cipher.decrypt(&aes_nonce.into(), ct.ct.as_ref()).unwrap()
 }
 
 #[cfg(test)]
@@ -147,6 +160,8 @@ mod tests {
 
         let crs = CRS::new(n, &mut rng);
 
+        let msg = b"Hello, world!";
+
         let sk = (0..n)
             .map(|_| SecretKey::<E>::new(&mut rng))
             .collect::<Vec<_>>();
@@ -158,7 +173,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let agg_key = AggregateKey::<E>::new(pk, &crs);
-        let ct = encrypt::<E>(&agg_key, t, &crs);
+        let ct = encrypt::<E>(&agg_key, t, &crs, msg);
 
         // compute partial decryptions
         let mut partial_decryptions: Vec<G2> = Vec::new();
@@ -178,6 +193,9 @@ mod tests {
             selector.push(false);
         }
 
-        let _dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &crs);
+        assert_eq!(
+            agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &crs),
+            msg
+        );
     }
 }
