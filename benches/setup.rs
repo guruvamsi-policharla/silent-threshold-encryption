@@ -17,7 +17,7 @@ fn bench_setup(c: &mut Criterion) {
     group.sample_size(10);
     let mut rng = ark_std::test_rng();
     for size in 3..=7 {
-        let n = 1 << size; // actually n-1 total parties. one party is a dummy party that is always true
+        let n = 1 << size;
         let tau = Fr::rand(&mut rng);
         let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
 

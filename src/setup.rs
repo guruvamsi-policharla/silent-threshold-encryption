@@ -28,7 +28,6 @@ pub struct AggregateKey<E: Pairing> {
     pub z_g2: E::G2,
 
     //preprocessed values
-    pub h_minus1: E::G2,
     pub e_gh: PairingOutput<E>,
 }
 
@@ -94,8 +93,7 @@ impl<E: Pairing> SecretKey<E> {
 impl<E: Pairing> AggregateKey<E> {
     pub fn new(pk: Vec<PublicKey<E>>, crs: &CRS<E>) -> Self {
         let n = pk.len();
-        let h_minus1 = crs.powers_of_h[0] * (-E::ScalarField::one());
-        let z_g2 = crs.powers_of_h[n] + h_minus1;
+        let z_g2 = crs.powers_of_h[n] + crs.powers_of_h[0] * (-E::ScalarField::one());
 
         // gather sk_li from all public keys
         let mut ask = E::G1::zero();
@@ -117,7 +115,6 @@ impl<E: Pairing> AggregateKey<E> {
             agg_sk_li_lj_z,
             ask,
             z_g2,
-            h_minus1,
             e_gh: E::pairing(crs.powers_of_g[0], crs.powers_of_h[0]),
         }
     }

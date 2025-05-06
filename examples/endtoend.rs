@@ -1,6 +1,5 @@
 use ark_ec::pairing::Pairing;
-use ark_poly::univariate::DensePolynomial;
-use ark_std::{end_timer, start_timer, UniformRand, Zero};
+use ark_std::{end_timer, start_timer, Zero};
 use silent_threshold_encryption::{
     crs::CRS,
     decryption::agg_dec,
@@ -10,9 +9,7 @@ use silent_threshold_encryption::{
 
 type E = ark_bls12_381::Bls12_381;
 type G2 = <E as Pairing>::G2;
-type Fr = <E as Pairing>::ScalarField;
 use rand::seq::IteratorRandom;
-use rayon::prelude::*;
 
 fn main() {
     let mut rng = ark_std::test_rng();
@@ -26,18 +23,16 @@ fn main() {
 
     println!("Setting up key pairs for {} parties", n);
     let key_timer = start_timer!(|| "Setting up keys");
-    // create the dummy party's keys
-    let mut sk = (0..n)
+
+    let sk = (0..n)
         .map(|_| SecretKey::<E>::new(&mut rng))
         .collect::<Vec<_>>();
-    sk[0].nullify();
-    let mut pk = vec![sk[0].get_pk(0, &crs, n); n];
+    let pk = sk
+        .iter()
+        .enumerate()
+        .map(|(i, sk)| sk.get_pk(i, &crs, n))
+        .collect::<Vec<_>>();
 
-    pk.par_iter_mut().enumerate().for_each(|(i, pk_i)| {
-        if i > 0 {
-            *pk_i = sk[i].get_pk(i, &crs, n);
-        }
-    });
     end_timer!(key_timer);
 
     let agg_key_timer = start_timer!(|| "Computing the aggregate key");

@@ -4,7 +4,7 @@ use ark_ec::{
     PrimeGroup,
 };
 use ark_serialize::*;
-use ark_std::{UniformRand, Zero};
+use ark_std::UniformRand;
 use std::ops::Mul;
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
@@ -46,13 +46,12 @@ pub fn encrypt<E: Pairing>(apk: &AggregateKey<E>, t: usize, crs: &CRS<E>) -> Cip
     let mut sa1 = [E::G1::generator(); 2];
     let mut sa2 = [E::G2::generator(); 6];
 
-    let mut s: [E::ScalarField; 5] = [E::ScalarField::zero(); 5];
+    let s = (0..5)
+        .map(|_| E::ScalarField::rand(&mut rng))
+        .collect::<Vec<_>>();
 
-    s.iter_mut()
-        .for_each(|s| *s = E::ScalarField::rand(&mut rng));
-
-    // sa1[0] = s0*ask + s3*g^{tau^{t+1}} + s4*g
-    sa1[0] = (apk.ask * s[0]) + (crs.powers_of_g[t + 1] * s[3]) + (crs.powers_of_g[0] * s[4]);
+    // sa1[0] = s0*ask + s3*g^{tau^{t}} + s4*g
+    sa1[0] = (apk.ask * s[0]) + (crs.powers_of_g[t] * s[3]) + (crs.powers_of_g[0] * s[4]);
 
     // sa1[1] = s2*g
     sa1[1] = g * s[2];
@@ -63,8 +62,8 @@ pub fn encrypt<E: Pairing>(apk: &AggregateKey<E>, t: usize, crs: &CRS<E>) -> Cip
     // sa2[1] = s0*z_g2
     sa2[1] = apk.z_g2 * s[0];
 
-    // sa2[2] = s0*h^tau + s1*h^tau
-    sa2[2] = crs.powers_of_h[1] * (s[0] + s[1]);
+    // sa2[2] = s0*h^tau + s1*h^{tau^2}
+    sa2[2] = crs.powers_of_h[1] * s[0] + crs.powers_of_h[2] * s[1];
 
     // sa2[3] = s1*h
     sa2[3] = h * s[1];
@@ -72,8 +71,8 @@ pub fn encrypt<E: Pairing>(apk: &AggregateKey<E>, t: usize, crs: &CRS<E>) -> Cip
     // sa2[4] = s3*h
     sa2[4] = h * s[3];
 
-    // sa2[5] = s4*h^{tau - omega^0}
-    sa2[5] = (crs.powers_of_h[1] + apk.h_minus1) * s[4];
+    // sa2[5] = s4*h^{tau}
+    sa2[5] = (crs.powers_of_h[1]) * s[4];
 
     // enc_key = s4*e_gh
     let enc_key = apk.e_gh.mul(s[4]);
@@ -110,7 +109,7 @@ mod tests {
 
         for i in 0..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(0, &crs, n))
+            pk.push(sk[i].get_pk(i, &crs, n))
         }
 
         let ak = AggregateKey::<E>::new(pk, &crs);
