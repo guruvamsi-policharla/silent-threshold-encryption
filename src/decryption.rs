@@ -178,8 +178,6 @@ mod tests {
             selector.push(false);
         }
 
-        println!("selector: {:?}", selector);
-
         let _dec_key = agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &crs);
     }
 }

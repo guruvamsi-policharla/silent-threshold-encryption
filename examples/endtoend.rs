@@ -44,14 +44,13 @@ fn main() {
     end_timer!(enc_timer);
 
     println!("Computing partial decryptions");
-    // sample t random signers from 1..n
+    // sample t random signers from 0..n-1
     let mut rng = rand::rng(); // Create a random number generator
-    let signers = (1..n).choose_multiple(&mut rng, t);
+    let signers = (0..n).choose_multiple(&mut rng, t);
 
     let mut selector: Vec<bool> = vec![false; n];
     let mut partial_decryptions: Vec<G2> = vec![G2::zero(); n];
-    selector[0] = true;
-    partial_decryptions[0] = sk[0].partial_decryption(&ct);
+
     for i in signers {
         selector[i] = true;
         partial_decryptions[i] = sk[i].partial_decryption(&ct);
