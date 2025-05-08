@@ -13,7 +13,7 @@ pub struct Ciphertext<E: Pairing> {
     pub gamma_g2: E::G2,
     pub sa1: [E::G1; 2],
     pub sa2: [E::G2; 6],
-    // pub enc_key: PairingOutput<E>, //key to be used for encapsulation
+    // pub enc_key: PairingOutput<E>, // key to be used for encapsulation (linearly homomorphic)
     pub ct: Vec<u8>, //encrypted message
     pub t: usize,    //threshold
 }
@@ -106,7 +106,7 @@ mod tests {
     use super::*;
     use crate::{
         crs::CRS,
-        setup::{PublicKey, SecretKey},
+        setup::{LagPublicKey, SecretKey},
     };
 
     type E = ark_bls12_381::Bls12_381;
@@ -122,11 +122,11 @@ mod tests {
         let msg = b"Hello, world!";
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
-        let mut pk: Vec<PublicKey<E>> = Vec::new();
+        let mut pk: Vec<LagPublicKey<E>> = Vec::new();
 
         for i in 0..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(i, &crs, n))
+            pk.push(sk[i].get_lagrange_pk(i, &crs))
         }
 
         let ak = AggregateKey::<E>::new(pk, &crs);

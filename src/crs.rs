@@ -9,7 +9,7 @@ use ark_std::{One, UniformRand, Zero};
 
 #[derive(Clone, Debug)]
 pub struct CRS<E: Pairing> {
-    pub n: usize,
+    pub n: usize, // maximum number of parties in a committee
     pub powers_of_g: Vec<E::G1Affine>,
     pub powers_of_h: Vec<E::G2Affine>,
 

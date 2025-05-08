@@ -1,17 +1,86 @@
 use crate::crs::CRS;
 use crate::encryption::Ciphertext;
-use ark_ec::pairing::PairingOutput;
-use ark_ec::{pairing::Pairing, PrimeGroup};
+use crate::utils::lagrange_poly;
+use ark_ec::{
+    pairing::{Pairing, PairingOutput},
+    CurveGroup, PrimeGroup, VariableBaseMSM,
+};
+use ark_ff::FftField;
+use ark_poly::DenseUVPolynomial;
+use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
 use ark_serialize::*;
 use ark_std::{rand::RngCore, One, UniformRand, Zero};
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(Clone)]
+pub struct LagPolys<F: FftField> {
+    pub l: Vec<DensePolynomial<F>>,
+    pub l_minus0: Vec<DensePolynomial<F>>,
+    pub l_x: Vec<DensePolynomial<F>>,
+    pub li_lj_z: Vec<Vec<DensePolynomial<F>>>,
+}
+
+impl<F: FftField> LagPolys<F> {
+    // domain is the roots of unity of size n
+    pub fn new(n: usize) -> Self {
+        let domain = Radix2EvaluationDomain::<F>::new(n).unwrap();
+
+        // compute polynomial L_i(X)
+        let mut l = vec![DensePolynomial::zero(); n];
+        for i in 0..n {
+            l[i] = lagrange_poly(n, i);
+        }
+
+        // compute polynomial (L_i(X) - L_i(0))*X
+        let mut l_minus0 = vec![DensePolynomial::zero(); n];
+        for i in 0..n {
+            let mut li_minus0_coeffs = l[i].coeffs.clone();
+            li_minus0_coeffs[0] = F::zero();
+            li_minus0_coeffs.insert(0, F::zero());
+            l_minus0[i] = DensePolynomial::from_coefficients_vec(li_minus0_coeffs);
+        }
+
+        // compute polynomial (L_i(X) - L_i(0))/X
+        let mut l_x = vec![DensePolynomial::zero(); n];
+        for i in 0..n {
+            l_x[i] = DensePolynomial::from_coefficients_vec(l[i].coeffs[2..].to_vec());
+        }
+
+        // compute polynomial L_i(X)*L_j(X)/Z(X) and (L_i(X)*L_i(X) - L_i(X))/Z(X)
+        let mut li_lj_z = vec![vec![DensePolynomial::zero(); n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                li_lj_z[i][j] = if i == j {
+                    (&l[i] * &l[i] - &l[i]).divide_by_vanishing_poly(domain).0
+                } else {
+                    (&l[i] * &l[j]).divide_by_vanishing_poly(domain).0
+                };
+            }
+        }
+
+        Self {
+            l,
+            l_minus0,
+            l_x,
+            li_lj_z,
+        }
+    }
+}
+
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SecretKey<E: Pairing> {
     sk: E::ScalarField,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Default, Debug)]
+/// Position oblivious public key -- slower to aggregate
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct PublicKey<E: Pairing> {
+    pub bls_pk: E::G1,     //BLS pk
+    pub hints: Vec<E::G1>, //hints
+}
+
+/// Public key that can only be used in a fixed position -- faster to aggregate
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+pub struct LagPublicKey<E: Pairing> {
     pub id: usize,
     pub bls_pk: E::G1,          //BLS pk
     pub sk_li: E::G1,           //hint
@@ -20,9 +89,9 @@ pub struct PublicKey<E: Pairing> {
     pub sk_li_x: E::G1,         //hint
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct AggregateKey<E: Pairing> {
-    pub pk: Vec<PublicKey<E>>,
+    pub pk: Vec<LagPublicKey<E>>,
     pub agg_sk_li_lj_z: Vec<E::G1>,
     pub ask: E::G1,
     pub z_g2: E::G2,
@@ -31,7 +100,7 @@ pub struct AggregateKey<E: Pairing> {
     pub e_gh: PairingOutput<E>,
 }
 
-impl<E: Pairing> PublicKey<E> {
+impl<E: Pairing> LagPublicKey<E> {
     pub fn new(
         id: usize,
         bls_pk: E::G1,
@@ -40,7 +109,7 @@ impl<E: Pairing> PublicKey<E> {
         sk_li_lj_z: Vec<E::G1>,
         sk_li_x: E::G1,
     ) -> Self {
-        PublicKey {
+        LagPublicKey {
             id,
             bls_pk,
             sk_li,
@@ -58,11 +127,23 @@ impl<E: Pairing> SecretKey<E> {
         }
     }
 
-    pub fn nullify(&mut self) {
-        self.sk = E::ScalarField::one()
+    pub fn from_scalar(sk: E::ScalarField) -> Self {
+        SecretKey { sk }
     }
 
-    pub fn get_pk(&self, id: usize, crs: &CRS<E>, n: usize) -> PublicKey<E> {
+    pub fn get_pk(&self, crs: &CRS<E>) -> PublicKey<E> {
+        let mut hints = vec![E::G1::zero(); crs.powers_of_g.len()];
+
+        let bls_pk = E::G1::generator() * self.sk;
+
+        for i in 0..crs.powers_of_g.len() {
+            hints[i] = crs.powers_of_g[i] * self.sk;
+        }
+
+        PublicKey { bls_pk, hints }
+    }
+
+    pub fn get_lagrange_pk(&self, id: usize, crs: &CRS<E>) -> LagPublicKey<E> {
         let mut sk_li_lj_z = vec![];
 
         let sk_li = crs.li[id] * self.sk;
@@ -71,11 +152,11 @@ impl<E: Pairing> SecretKey<E> {
 
         let sk_li_x = crs.li_x[id] * self.sk;
 
-        for j in 0..n {
+        for j in 0..crs.n {
             sk_li_lj_z.push(crs.li_lj_z[id][j] * self.sk);
         }
 
-        PublicKey {
+        LagPublicKey {
             id,
             bls_pk: E::G1::generator() * self.sk,
             sk_li,
@@ -90,8 +171,63 @@ impl<E: Pairing> SecretKey<E> {
     }
 }
 
+impl<E: Pairing> LagPublicKey<E> {
+    pub fn from_public_key(
+        &self,
+        id: usize,
+        pk: &PublicKey<E>,
+        crs: &CRS<E>,
+        lagpolys: &LagPolys<E::ScalarField>,
+    ) -> Self {
+        let bls_pk = pk.bls_pk;
+
+        let affine_hints = pk.hints.iter().map(|h| h.into_affine()).collect::<Vec<_>>();
+
+        // compute sk_li
+        let sk_li = E::G1::msm(
+            &affine_hints[0..lagpolys.l[id].degree() + 1],
+            &lagpolys.l[id],
+        )
+        .unwrap();
+
+        // compute sk_li_minus0
+        let sk_li_minus0 = E::G1::msm(
+            &affine_hints[0..lagpolys.l_minus0[id].degree() + 1],
+            &lagpolys.l_minus0[id],
+        )
+        .unwrap();
+
+        // compute sk_li_x
+        let sk_li_x = E::G1::msm(
+            &affine_hints[0..lagpolys.l_x[id].degree() + 1],
+            &lagpolys.l_x[id],
+        )
+        .unwrap();
+
+        // compute sk_li_lj_z
+        let mut sk_li_lj_z = vec![E::G1::zero(); crs.n];
+
+        for j in 0..crs.n {
+            sk_li_lj_z[j] = E::G1::msm(
+                &affine_hints[0..lagpolys.li_lj_z[id][j].degree() + 1],
+                &lagpolys.li_lj_z[id][j],
+            )
+            .unwrap();
+        }
+
+        Self {
+            id,
+            bls_pk,
+            sk_li,
+            sk_li_minus0,
+            sk_li_lj_z,
+            sk_li_x,
+        }
+    }
+}
+
 impl<E: Pairing> AggregateKey<E> {
-    pub fn new(pk: Vec<PublicKey<E>>, crs: &CRS<E>) -> Self {
+    pub fn new(pk: Vec<LagPublicKey<E>>, crs: &CRS<E>) -> Self {
         let n = pk.len();
         let z_g2 = crs.powers_of_h[n] + crs.powers_of_h[0] * (-E::ScalarField::one());
 
@@ -124,21 +260,22 @@ impl<E: Pairing> AggregateKey<E> {
 mod tests {
     use super::*;
     type E = ark_bls12_381::Bls12_381;
+    type F = ark_bls12_381::Fr;
 
     #[test]
     fn test_setup() {
         let mut rng = ark_std::test_rng();
-        let n = 16;
+        let n = 1 << 4;
         let crs = CRS::<E>::new(n, &mut rng);
 
         let mut sk: Vec<SecretKey<E>> = Vec::new();
-        let mut pk: Vec<PublicKey<E>> = Vec::new();
-        let mut lagrange_pk: Vec<PublicKey<E>> = Vec::new();
+        let mut pk: Vec<LagPublicKey<E>> = Vec::new();
+        let mut lagrange_pk: Vec<LagPublicKey<E>> = Vec::new();
 
         for i in 0..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_pk(i, &crs, n));
-            lagrange_pk.push(sk[i].get_pk(i, &crs, n));
+            pk.push(sk[i].get_lagrange_pk(i, &crs));
+            lagrange_pk.push(sk[i].get_lagrange_pk(i, &crs));
 
             assert_eq!(pk[i].sk_li, lagrange_pk[i].sk_li);
             assert_eq!(pk[i].sk_li_minus0, lagrange_pk[i].sk_li_minus0);
@@ -147,5 +284,20 @@ mod tests {
         }
 
         let _ak = AggregateKey::<E>::new(pk, &crs);
+    }
+
+    #[test]
+    fn test_setup_lag_setup() {
+        let mut rng = ark_std::test_rng();
+        let n = 1 << 4;
+        let crs = CRS::<E>::new(n, &mut rng);
+        let lagpolys = LagPolys::<F>::new(n);
+
+        let sk = SecretKey::<E>::new(&mut rng);
+        let pk = sk.get_pk(&crs);
+        let lag_pk = sk.get_lagrange_pk(0, &crs);
+
+        let computed_lag_pk = lag_pk.from_public_key(0, &pk, &crs, &lagpolys);
+        assert_eq!(computed_lag_pk.bls_pk, pk.bls_pk);
     }
 }
