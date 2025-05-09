@@ -72,7 +72,7 @@ pub struct SecretKey<E: Pairing> {
 }
 
 /// Position oblivious public key -- slower to aggregate
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Debug, Clone)]
 pub struct PublicKey<E: Pairing> {
     pub bls_pk: E::G1,           //BLS pk
     pub hints: Vec<E::G1Affine>, //hints
