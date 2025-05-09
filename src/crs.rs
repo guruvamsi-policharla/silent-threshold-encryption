@@ -28,9 +28,11 @@ pub struct CRS<E: Pairing> {
 
 impl<E: Pairing> CRS<E> {
     pub fn new(n: usize, rng: &mut impl Rng) -> Self {
-        // powers of tau
         let tau = E::ScalarField::rand(rng);
+        Self::deterministic_new(n, tau)
+    }
 
+    pub fn deterministic_new(n: usize, tau: E::ScalarField) -> Self {
         let mut powers_of_tau = vec![E::ScalarField::one()];
 
         let mut cur = tau;
