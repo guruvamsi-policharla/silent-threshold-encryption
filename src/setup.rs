@@ -3,7 +3,7 @@ use crate::encryption::Ciphertext;
 use crate::utils::lagrange_poly;
 use ark_ec::{
     pairing::{Pairing, PairingOutput},
-    CurveGroup, PrimeGroup, VariableBaseMSM,
+    AffineRepr, PrimeGroup, VariableBaseMSM,
 };
 use ark_ff::FftField;
 use ark_poly::DenseUVPolynomial;
@@ -74,8 +74,8 @@ pub struct SecretKey<E: Pairing> {
 /// Position oblivious public key -- slower to aggregate
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct PublicKey<E: Pairing> {
-    pub bls_pk: E::G1,     //BLS pk
-    pub hints: Vec<E::G1>, //hints
+    pub bls_pk: E::G1,           //BLS pk
+    pub hints: Vec<E::G1Affine>, //hints
 }
 
 /// Public key that can only be used in a fixed position -- faster to aggregate
@@ -132,12 +132,12 @@ impl<E: Pairing> SecretKey<E> {
     }
 
     pub fn get_pk(&self, crs: &CRS<E>) -> PublicKey<E> {
-        let mut hints = vec![E::G1::zero(); crs.powers_of_g.len()];
+        let mut hints = vec![E::G1Affine::zero(); crs.powers_of_g.len()];
 
         let bls_pk = E::G1::generator() * self.sk;
 
         for i in 0..crs.powers_of_g.len() {
-            hints[i] = crs.powers_of_g[i] * self.sk;
+            hints[i] = (crs.powers_of_g[i] * self.sk).into();
         }
 
         PublicKey { bls_pk, hints }
@@ -181,25 +181,19 @@ impl<E: Pairing> LagPublicKey<E> {
     ) -> Self {
         let bls_pk = pk.bls_pk;
 
-        let affine_hints = pk.hints.iter().map(|h| h.into_affine()).collect::<Vec<_>>();
-
         // compute sk_li
-        let sk_li = E::G1::msm(
-            &affine_hints[0..lagpolys.l[id].degree() + 1],
-            &lagpolys.l[id],
-        )
-        .unwrap();
+        let sk_li = E::G1::msm(&pk.hints[0..lagpolys.l[id].degree() + 1], &lagpolys.l[id]).unwrap();
 
         // compute sk_li_minus0
         let sk_li_minus0 = E::G1::msm(
-            &affine_hints[0..lagpolys.l_minus0[id].degree() + 1],
+            &pk.hints[0..lagpolys.l_minus0[id].degree() + 1],
             &lagpolys.l_minus0[id],
         )
         .unwrap();
 
         // compute sk_li_x
         let sk_li_x = E::G1::msm(
-            &affine_hints[0..lagpolys.l_x[id].degree() + 1],
+            &pk.hints[0..lagpolys.l_x[id].degree() + 1],
             &lagpolys.l_x[id],
         )
         .unwrap();
@@ -209,7 +203,7 @@ impl<E: Pairing> LagPublicKey<E> {
 
         for j in 0..crs.n {
             sk_li_lj_z[j] = E::G1::msm(
-                &affine_hints[0..lagpolys.li_lj_z[id][j].degree() + 1],
+                &pk.hints[0..lagpolys.li_lj_z[id][j].degree() + 1],
                 &lagpolys.li_lj_z[id][j],
             )
             .unwrap();
