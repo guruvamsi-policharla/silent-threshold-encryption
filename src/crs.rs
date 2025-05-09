@@ -4,10 +4,11 @@ use ark_ec::{PrimeGroup, VariableBaseMSM};
 use ark_ff::{Field, PrimeField};
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::rand::Rng;
 use ark_std::{One, UniformRand, Zero};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct CRS<E: Pairing> {
     pub n: usize, // maximum number of parties in a committee
     pub powers_of_g: Vec<E::G1Affine>,

@@ -4,7 +4,7 @@ use silent_threshold_encryption::{
     crs::CRS,
     decryption::agg_dec,
     encryption::encrypt,
-    setup::{AggregateKey, SecretKey},
+    setup::{AggregateKey, LagPolys, SecretKey},
 };
 
 type E = ark_bls12_381::Bls12_381;
@@ -13,30 +13,32 @@ use rand::seq::IteratorRandom;
 
 fn main() {
     let mut rng = ark_std::test_rng();
-    let n = 1 << 4; // actually n-1 total parties. one party is a dummy party that is always true
+    let n = 1 << 7;
     let t: usize = 9;
     debug_assert!(t < n);
 
-    let kzg_timer = start_timer!(|| "Setting up KZG parameters");
+    let kzg_timer = start_timer!(|| "Setting up parameters");
     let crs = CRS::new(n, &mut rng);
+    let lagpolys = LagPolys::new(n);
     end_timer!(kzg_timer);
 
     println!("Setting up key pairs for {} parties", n);
-    let key_timer = start_timer!(|| "Setting up keys");
 
     let sk = (0..n)
         .map(|_| SecretKey::<E>::new(&mut rng))
         .collect::<Vec<_>>();
-    let pk = sk
+    let pk = sk.iter().map(|sk| sk.get_pk(&crs)).collect::<Vec<_>>();
+
+    let key_timer = start_timer!(|| "Setting up positional keys");
+    let lagrange_pk = pk
         .iter()
         .enumerate()
-        .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
+        .map(|(i, pk)| pk.get_lag_public_key(i, pk, &crs, &lagpolys))
         .collect::<Vec<_>>();
-
     end_timer!(key_timer);
 
     let agg_key_timer = start_timer!(|| "Computing the aggregate key");
-    let agg_key = AggregateKey::<E>::new(pk, &crs);
+    let agg_key = AggregateKey::<E>::new(lagrange_pk, &crs);
     end_timer!(agg_key_timer);
 
     let msg = b"Hello, world!";

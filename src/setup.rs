@@ -42,7 +42,7 @@ impl<F: FftField> LagPolys<F> {
         // compute polynomial (L_i(X) - L_i(0))/X
         let mut l_x = vec![DensePolynomial::zero(); n];
         for i in 0..n {
-            l_x[i] = DensePolynomial::from_coefficients_vec(l[i].coeffs[2..].to_vec());
+            l_x[i] = DensePolynomial::from_coefficients_vec(l_minus0[i].coeffs[2..].to_vec());
         }
 
         // compute polynomial L_i(X)*L_j(X)/Z(X) and (L_i(X)*L_i(X) - L_i(X))/Z(X)
@@ -72,7 +72,7 @@ pub struct SecretKey<E: Pairing> {
 }
 
 /// Position oblivious public key -- slower to aggregate
-#[derive(CanonicalSerialize, CanonicalDeserialize, Debug, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct PublicKey<E: Pairing> {
     pub bls_pk: E::G1,           //BLS pk
     pub hints: Vec<E::G1Affine>, //hints
@@ -106,7 +106,7 @@ impl<E: Pairing> LagPublicKey<E> {
         bls_pk: E::G1,
         sk_li: E::G1,
         sk_li_minus0: E::G1,
-        sk_li_lj_z: Vec<E::G1>,
+        sk_li_lj_z: Vec<E::G1>, //i = id
         sk_li_x: E::G1,
     ) -> Self {
         LagPublicKey {
@@ -171,14 +171,14 @@ impl<E: Pairing> SecretKey<E> {
     }
 }
 
-impl<E: Pairing> LagPublicKey<E> {
-    pub fn from_public_key(
+impl<E: Pairing> PublicKey<E> {
+    pub fn get_lag_public_key(
         &self,
         id: usize,
         pk: &PublicKey<E>,
         crs: &CRS<E>,
         lagpolys: &LagPolys<E::ScalarField>,
-    ) -> Self {
+    ) -> LagPublicKey<E> {
         let bls_pk = pk.bls_pk;
 
         // compute sk_li
@@ -209,7 +209,7 @@ impl<E: Pairing> LagPublicKey<E> {
             .unwrap();
         }
 
-        Self {
+        LagPublicKey {
             id,
             bls_pk,
             sk_li,
@@ -291,7 +291,11 @@ mod tests {
         let pk = sk.get_pk(&crs);
         let lag_pk = sk.get_lagrange_pk(0, &crs);
 
-        let computed_lag_pk = lag_pk.from_public_key(0, &pk, &crs, &lagpolys);
-        assert_eq!(computed_lag_pk.bls_pk, pk.bls_pk);
+        let computed_lag_pk = pk.get_lag_public_key(0, &pk, &crs, &lagpolys);
+        assert_eq!(computed_lag_pk.bls_pk, lag_pk.bls_pk);
+        assert_eq!(computed_lag_pk.sk_li, lag_pk.sk_li);
+        assert_eq!(computed_lag_pk.sk_li_minus0, lag_pk.sk_li_minus0);
+        assert_eq!(computed_lag_pk.sk_li_x, lag_pk.sk_li_x);
+        assert_eq!(computed_lag_pk.sk_li_lj_z, lag_pk.sk_li_lj_z);
     }
 }
