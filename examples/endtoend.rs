@@ -15,7 +15,7 @@ use rand::seq::IteratorRandom;
 fn main() {
     let mut rng = ark_std::test_rng();
     let n = 1 << 7;
-    let t: usize = 9;
+    let t: usize = 3;
     debug_assert!(t < n);
 
     let kzg_timer = start_timer!(|| "Setting up parameters");

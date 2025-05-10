@@ -83,7 +83,7 @@ pub fn open_all_values<E: Pairing>(
 
 /// interpolates a polynomial where evaluations on points are zero and the polynomial evaluates to 1 at the point 1
 /// but relies on the number of points being a power of 2
-/// currently not used as this portion is not a bottleneck during decryption
+/// currently not used as this portion is not a bottleneck
 // pub fn compute_vanishing_poly(points: &Vec<ScalarField>) -> DensePolynomial {
 //     let mut monomials = Vec::new();
 //     for i in 0..points.len() {
@@ -134,7 +134,7 @@ mod tests {
     fn open_all_test() {
         let mut rng = ark_std::test_rng();
 
-        let n = 1 << 5;
+        let n = 1 << 8;
         let domain = Radix2EvaluationDomain::<Fr>::new(n).unwrap();
         let crs = CRS::<E>::new(n, &mut ark_std::test_rng());
 

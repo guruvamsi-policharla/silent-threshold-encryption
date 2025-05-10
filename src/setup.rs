@@ -1,10 +1,12 @@
 use crate::crs::CRS;
 use crate::encryption::Ciphertext;
-use crate::utils::lagrange_poly;
+use crate::utils::{lagrange_poly, open_all_values};
 use ark_ec::{pairing::Pairing, AffineRepr, PrimeGroup, VariableBaseMSM};
 use ark_ff::FftField;
-use ark_poly::DenseUVPolynomial;
-use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
+use ark_poly::{
+    univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
+    Radix2EvaluationDomain,
+};
 use ark_serialize::*;
 use ark_std::{rand::RngCore, UniformRand, Zero};
 
@@ -14,6 +16,7 @@ pub struct LagPolys<F: FftField> {
     pub l_minus0: Vec<DensePolynomial<F>>,
     pub l_x: Vec<DensePolynomial<F>>,
     pub li_lj_z: Vec<Vec<DensePolynomial<F>>>,
+    pub denom: F,
 }
 
 impl<F: FftField> LagPolys<F> {
@@ -54,11 +57,30 @@ impl<F: FftField> LagPolys<F> {
             }
         }
 
+        let mut denom = F::one();
+        for i in 1..n {
+            denom *= F::one() - domain.element(i);
+        }
+
+        // for i in 0..n {
+        //     for j in 0..n {
+        //         let monomial =
+        //             DensePolynomial::from_coefficients_vec(vec![-domain.element(j), F::one()]);
+
+        //         let computed = &l[i] / &monomial;
+        //         assert_eq!(
+        //             li_lj_z[i][j].evaluate(&F::zero()),
+        //             computed.evaluate(&F::zero()) / (denom * domain.element(n - j))
+        //         );
+        //     }
+        // }
+
         Self {
             l,
             l_minus0,
             l_x,
             li_lj_z,
+            denom,
         }
     }
 }
@@ -73,6 +95,7 @@ pub struct SecretKey<E: Pairing> {
 pub struct PublicKey<E: Pairing> {
     pub bls_pk: E::G1,           //BLS pk
     pub hints: Vec<E::G1Affine>, //hints
+    pub y: Vec<E::G1Affine>, // preprocessed toeplitz matrix. only for efficiency and can be computed from hints
 }
 
 /// Public key that can only be used in a fixed position -- faster to aggregate
@@ -126,7 +149,13 @@ impl<E: Pairing> SecretKey<E> {
             hints[i] = (crs.powers_of_g[i] * self.sk).into();
         }
 
-        PublicKey { bls_pk, hints }
+        // compute y
+        let mut y = vec![E::G1Affine::zero(); crs.y.len()];
+        for i in 0..crs.y.len() {
+            y[i] = (crs.y[i] * self.sk).into();
+        }
+
+        PublicKey { bls_pk, hints, y }
     }
 
     pub fn get_lagrange_pk(&self, id: usize, crs: &CRS<E>) -> LagPublicKey<E> {
@@ -189,16 +218,32 @@ impl<E: Pairing> PublicKey<E> {
         )
         .unwrap();
 
-        // compute sk_li_lj_z
-        let mut sk_li_lj_z = vec![E::G1::zero(); crs.n];
-
+        // compute sk*Li*Lj/Z = sk*Li/(X-omega^j)*(omega^j/denom) for all j in [n]\{i}
+        // for j = i: (Li^2 - Li)/Z = (Li - 1)/(X-omega^i)*(omega^i/denom)
+        // this is the same as computing KZG opening proofs at all points
+        // in the roots of unity domain for the polynomial Li(X), where the
+        // crs is {g^sk, g^{sk * tau}, g^{sk * tau^2}, ...}
+        // todo: move to https://eprint.iacr.org/2024/1279.pdf
+        let domain = Radix2EvaluationDomain::<E::ScalarField>::new(crs.n).unwrap();
+        let mut sk_li_lj_z = open_all_values::<E>(&self.y, &lag_polys.l[id].coeffs, &domain);
         for j in 0..crs.n {
-            sk_li_lj_z[j] = E::G1::msm(
-                &self.hints[0..lag_polys.li_lj_z[id][j].degree() + 1],
-                &lag_polys.li_lj_z[id][j],
-            )
-            .unwrap();
+            sk_li_lj_z[j] *= domain.element(j) / lag_polys.denom;
         }
+
+        // // compute sk_li_lj_z
+        // let mut sk_li_lj_z = vec![E::G1::zero(); crs.n];
+
+        // let timer = start_timer!(|| "msm version");
+        // for j in 0..crs.n {
+        //     sk_li_lj_z[j] = E::G1::msm(
+        //         &self.hints[0..lag_polys.li_lj_z[id][j].degree() + 1],
+        //         &lag_polys.li_lj_z[id][j],
+        //     )
+        //     .unwrap();
+        // }
+        // end_timer!(timer);
+
+        // assert_eq!(sk_li_lj_z, my_sk_li_lj_z);
 
         LagPublicKey {
             id,
@@ -245,15 +290,16 @@ mod tests {
     #[test]
     fn test_setup_lag_setup() {
         let mut rng = ark_std::test_rng();
-        let n = 1 << 4;
+        let n = 1 << 7;
         let crs = CRS::<E>::new(n, &mut rng);
         let lagpolys = LagPolys::<F>::new(n);
 
         let sk = SecretKey::<E>::new(&mut rng);
         let pk = sk.get_pk(&crs);
-        let lag_pk = sk.get_lagrange_pk(0, &crs);
+        let lag_pk = sk.get_lagrange_pk(n - 1, &crs);
 
-        let computed_lag_pk = pk.get_lag_public_key(0, &crs, &lagpolys);
+        let computed_lag_pk = pk.get_lag_public_key(n - 1, &crs, &lagpolys);
+
         assert_eq!(computed_lag_pk.bls_pk, lag_pk.bls_pk);
         assert_eq!(computed_lag_pk.sk_li, lag_pk.sk_li);
         assert_eq!(computed_lag_pk.sk_li_minus0, lag_pk.sk_li_minus0);
