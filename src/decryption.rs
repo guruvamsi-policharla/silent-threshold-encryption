@@ -10,7 +10,7 @@ use aes_gcm::{aead::Aead, Aes256Gcm, Key, KeyInit};
 use hkdf::Hkdf;
 use sha2::Sha256;
 
-use crate::{crs::CRS, encryption::Ciphertext, setup::AggregateKey, utils::interp_mostly_zero};
+use crate::{aggregate::AggregateKey, crs::CRS, encryption::Ciphertext, utils::interp_mostly_zero};
 
 pub fn agg_dec<E: Pairing>(
     partial_decryptions: &[E::G2], //insert 0 if a party did not respond or verification failed

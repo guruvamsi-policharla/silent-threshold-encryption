@@ -1,12 +1,12 @@
 use crate::utils::lagrange_poly;
-use ark_ec::{pairing::Pairing, ScalarMul};
-use ark_ec::{PrimeGroup, VariableBaseMSM};
+use ark_ec::{pairing::Pairing, PrimeGroup, ScalarMul, VariableBaseMSM};
 use ark_ff::{Field, PrimeField};
-use ark_poly::univariate::DensePolynomial;
-use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_poly::{
+    univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
+    Radix2EvaluationDomain,
+};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::rand::Rng;
-use ark_std::{One, UniformRand, Zero};
+use ark_std::{rand::Rng, One, UniformRand, Zero};
 
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct CRS<E: Pairing> {
@@ -25,6 +25,9 @@ pub struct CRS<E: Pairing> {
     pub li_minus0_g2: Vec<E::G2>,
     pub li_x_g2: Vec<E::G2>,
     pub li_lj_z_g2: Vec<Vec<E::G2>>,
+
+    // preprocessed Toeplitz matrix
+    pub y: Vec<E::G1Affine>,
 }
 
 impl<E: Pairing> CRS<E> {
@@ -106,6 +109,18 @@ impl<E: Pairing> CRS<E> {
             }
         }
 
+        // Compute the Toeplitz matrix preprocessing ==================================================
+        let mut top_tau = powers_of_tau.clone();
+        top_tau.truncate(n);
+        top_tau.reverse();
+        top_tau.resize(2 * n, E::ScalarField::zero());
+
+        let top_domain = Radix2EvaluationDomain::<E::ScalarField>::new(2 * n).unwrap();
+        let top_tau = top_domain.fft(&top_tau);
+
+        // Compute powers of top_tau
+        let y = E::G1::generator().batch_mul(&top_tau);
+
         Self {
             n,
             powers_of_g,
@@ -120,6 +135,8 @@ impl<E: Pairing> CRS<E> {
             li_minus0_g2,
             li_x_g2,
             li_lj_z_g2,
+
+            y,
         }
     }
 

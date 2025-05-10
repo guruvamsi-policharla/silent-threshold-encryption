@@ -1,15 +1,12 @@
 use crate::crs::CRS;
 use crate::encryption::Ciphertext;
 use crate::utils::lagrange_poly;
-use ark_ec::{
-    pairing::{Pairing, PairingOutput},
-    AffineRepr, PrimeGroup, VariableBaseMSM,
-};
+use ark_ec::{pairing::Pairing, AffineRepr, PrimeGroup, VariableBaseMSM};
 use ark_ff::FftField;
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial, Radix2EvaluationDomain};
 use ark_serialize::*;
-use ark_std::{rand::RngCore, One, UniformRand, Zero};
+use ark_std::{rand::RngCore, UniformRand, Zero};
 
 #[derive(Clone)]
 pub struct LagPolys<F: FftField> {
@@ -89,17 +86,6 @@ pub struct LagPublicKey<E: Pairing> {
     pub sk_li_x: E::G1,         //hint
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
-pub struct AggregateKey<E: Pairing> {
-    pub pk: Vec<LagPublicKey<E>>,
-    pub agg_sk_li_lj_z: Vec<E::G1>,
-    pub ask: E::G1,
-    pub z_g2: E::G2,
-
-    //preprocessed values
-    pub e_gh: PairingOutput<E>,
-}
-
 impl<E: Pairing> LagPublicKey<E> {
     pub fn new(
         id: usize,
@@ -175,26 +161,31 @@ impl<E: Pairing> PublicKey<E> {
     pub fn get_lag_public_key(
         &self,
         id: usize,
-        pk: &PublicKey<E>,
         crs: &CRS<E>,
-        lagpolys: &LagPolys<E::ScalarField>,
+        lag_polys: &LagPolys<E::ScalarField>,
     ) -> LagPublicKey<E> {
-        let bls_pk = pk.bls_pk;
+        assert!(id < crs.n, "position out of bounds");
+
+        let bls_pk = self.bls_pk;
 
         // compute sk_li
-        let sk_li = E::G1::msm(&pk.hints[0..lagpolys.l[id].degree() + 1], &lagpolys.l[id]).unwrap();
+        let sk_li = E::G1::msm(
+            &self.hints[0..lag_polys.l[id].degree() + 1],
+            &lag_polys.l[id],
+        )
+        .unwrap();
 
         // compute sk_li_minus0
         let sk_li_minus0 = E::G1::msm(
-            &pk.hints[0..lagpolys.l_minus0[id].degree() + 1],
-            &lagpolys.l_minus0[id],
+            &self.hints[0..lag_polys.l_minus0[id].degree() + 1],
+            &lag_polys.l_minus0[id],
         )
         .unwrap();
 
         // compute sk_li_x
         let sk_li_x = E::G1::msm(
-            &pk.hints[0..lagpolys.l_x[id].degree() + 1],
-            &lagpolys.l_x[id],
+            &self.hints[0..lag_polys.l_x[id].degree() + 1],
+            &lag_polys.l_x[id],
         )
         .unwrap();
 
@@ -203,8 +194,8 @@ impl<E: Pairing> PublicKey<E> {
 
         for j in 0..crs.n {
             sk_li_lj_z[j] = E::G1::msm(
-                &pk.hints[0..lagpolys.li_lj_z[id][j].degree() + 1],
-                &lagpolys.li_lj_z[id][j],
+                &self.hints[0..lag_polys.li_lj_z[id][j].degree() + 1],
+                &lag_polys.li_lj_z[id][j],
             )
             .unwrap();
         }
@@ -220,39 +211,10 @@ impl<E: Pairing> PublicKey<E> {
     }
 }
 
-impl<E: Pairing> AggregateKey<E> {
-    pub fn new(pk: Vec<LagPublicKey<E>>, crs: &CRS<E>) -> Self {
-        let n = pk.len();
-        let z_g2 = crs.powers_of_h[n] + crs.powers_of_h[0] * (-E::ScalarField::one());
-
-        // gather sk_li from all public keys
-        let mut ask = E::G1::zero();
-        for pki in pk.iter() {
-            ask += pki.sk_li;
-        }
-
-        let mut agg_sk_li_lj_z = vec![];
-        for i in 0..n {
-            let mut agg_sk_li_lj_zi = E::G1::zero();
-            for pkj in pk.iter() {
-                agg_sk_li_lj_zi += pkj.sk_li_lj_z[i];
-            }
-            agg_sk_li_lj_z.push(agg_sk_li_lj_zi);
-        }
-
-        AggregateKey {
-            pk,
-            agg_sk_li_lj_z,
-            ask,
-            z_g2,
-            e_gh: E::pairing(crs.powers_of_g[0], crs.powers_of_h[0]),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::AggregateKey;
     type E = ark_bls12_381::Bls12_381;
     type F = ark_bls12_381::Fr;
 
@@ -291,7 +253,7 @@ mod tests {
         let pk = sk.get_pk(&crs);
         let lag_pk = sk.get_lagrange_pk(0, &crs);
 
-        let computed_lag_pk = pk.get_lag_public_key(0, &pk, &crs, &lagpolys);
+        let computed_lag_pk = pk.get_lag_public_key(0, &crs, &lagpolys);
         assert_eq!(computed_lag_pk.bls_pk, lag_pk.bls_pk);
         assert_eq!(computed_lag_pk.sk_li, lag_pk.sk_li);
         assert_eq!(computed_lag_pk.sk_li_minus0, lag_pk.sk_li_minus0);

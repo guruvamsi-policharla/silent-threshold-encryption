@@ -1,8 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use silent_threshold_encryption::{
-    crs::CRS,
-    encryption::encrypt,
-    setup::{AggregateKey, SecretKey},
+    aggregate::AggregateKey, crs::CRS, encryption::encrypt, setup::SecretKey,
 };
 
 type E = ark_bls12_381::Bls12_381;

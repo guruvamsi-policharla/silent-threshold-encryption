@@ -1,4 +1,4 @@
-use crate::{crs::CRS, setup::AggregateKey};
+use crate::{aggregate::AggregateKey, crs::CRS};
 use ark_ec::{pairing::Pairing, PrimeGroup};
 use ark_serialize::*;
 use ark_std::UniformRand;

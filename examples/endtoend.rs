@@ -1,10 +1,11 @@
 use ark_ec::pairing::Pairing;
 use ark_std::{end_timer, start_timer, Zero};
 use silent_threshold_encryption::{
+    aggregate::AggregateKey,
     crs::CRS,
     decryption::agg_dec,
     encryption::encrypt,
-    setup::{AggregateKey, LagPolys, SecretKey},
+    setup::{LagPolys, SecretKey},
 };
 
 type E = ark_bls12_381::Bls12_381;
@@ -33,7 +34,7 @@ fn main() {
     let lagrange_pk = pk
         .iter()
         .enumerate()
-        .map(|(i, pk)| pk.get_lag_public_key(i, pk, &crs, &lagpolys))
+        .map(|(i, pk)| pk.get_lag_public_key(i, &crs, &lagpolys))
         .collect::<Vec<_>>();
     end_timer!(key_timer);
 

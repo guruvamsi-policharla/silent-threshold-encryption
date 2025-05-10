@@ -1,8 +1,10 @@
+use ark_ec::pairing::Pairing;
 use ark_ff::{FftField, Field};
 use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Evaluations, Polynomial,
     Radix2EvaluationDomain,
 };
+use ark_std::Zero;
 
 // 1 at omega^i and 0 elsewhere on domain {omega^i}_{i \in [n]}
 pub fn lagrange_poly<F: FftField>(n: usize, i: usize) -> DensePolynomial<F> {
@@ -43,7 +45,45 @@ pub fn interp_mostly_zero<F: Field>(points: &Vec<F>) -> DensePolynomial<F> {
     interp
 }
 
-// /// interpolates a polynomial where evaluations on points are zero and the polynomial evaluates to 1 at the point 1
+/// Computes all the openings of a KZG commitment in O(n log n) time
+/// See https://github.com/khovratovich/Kate/blob/master/Kate_amortized.pdf
+/// eprint version has a bug and hasn't been updated
+pub fn open_all_values<E: Pairing>(
+    y: &Vec<E::G1Affine>,
+    f: &Vec<E::ScalarField>,
+    domain: &Radix2EvaluationDomain<E::ScalarField>,
+) -> Vec<E::G1> {
+    let top_domain = Radix2EvaluationDomain::<E::ScalarField>::new(2 * domain.size()).unwrap();
+
+    // use FK22 to get all the KZG proofs in O(nlog n) time =======================
+    // f = {f0 ,f1, ..., fd}
+    // v = {(d 0s), f1, ..., fd}
+    let mut v = vec![E::ScalarField::zero(); domain.size() + 1];
+    v.append(&mut f[1..f.len()].to_vec());
+
+    debug_assert_eq!(v.len(), 2 * domain.size());
+    let v = top_domain.fft(&v);
+
+    // h = y \odot v
+    let mut h = vec![E::G1::zero(); 2 * domain.size()];
+    for i in 0..2 * domain.size() {
+        h[i] = y[i] * (v[i]);
+    }
+
+    // inverse fft on h
+    let mut h = top_domain.ifft(&h);
+
+    h.truncate(domain.size());
+
+    // fft on h to get KZG proofs
+    let pi = domain.fft(&h);
+
+    pi
+}
+
+/// interpolates a polynomial where evaluations on points are zero and the polynomial evaluates to 1 at the point 1
+/// but relies on the number of points being a power of 2
+/// currently not used as this portion is not a bottleneck during decryption
 // pub fn compute_vanishing_poly(points: &Vec<ScalarField>) -> DensePolynomial {
 //     let mut monomials = Vec::new();
 //     for i in 0..points.len() {
@@ -74,3 +114,51 @@ pub fn interp_mostly_zero<F: Field>(points: &Vec<F>) -> DensePolynomial<F> {
 
 //     res
 // }
+
+#[cfg(test)]
+mod tests {
+    use ark_bls12_381::Bls12_381;
+    use ark_ec::VariableBaseMSM;
+    use ark_ec::{bls12::Bls12, pairing::Pairing};
+    use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial};
+    use ark_std::{UniformRand, Zero};
+
+    use crate::crs::CRS;
+
+    use super::*;
+    type Fr = <Bls12<ark_bls12_381::Config> as Pairing>::ScalarField;
+    type G1 = <Bls12<ark_bls12_381::Config> as Pairing>::G1;
+    type E = Bls12_381;
+
+    #[test]
+    fn open_all_test() {
+        let mut rng = ark_std::test_rng();
+
+        let n = 1 << 5;
+        let domain = Radix2EvaluationDomain::<Fr>::new(n).unwrap();
+        let crs = CRS::<E>::new(n, &mut ark_std::test_rng());
+
+        let mut f: Vec<ark_ff::Fp<ark_ff::MontBackend<ark_bls12_381::FrConfig, 4>, 4>> =
+            vec![Fr::zero(); n];
+        for i in 0..n {
+            f[i] = Fr::rand(&mut rng);
+        }
+
+        let com = G1::msm(&crs.powers_of_g[0..f.len()], &f).unwrap();
+
+        let timer = std::time::Instant::now();
+        let pi = open_all_values::<E>(&crs.y, &f, &domain);
+        println!("open_all_values took {:?}", timer.elapsed());
+
+        // verify the kzg proof
+        let g = crs.powers_of_g[0];
+        let h = crs.powers_of_h[0];
+
+        let fpoly = DensePolynomial::from_coefficients_vec(f.clone());
+        for i in 0..n {
+            let lhs = E::pairing(com - (g * fpoly.evaluate(&domain.element(i))), h);
+            let rhs = E::pairing(pi[i], crs.powers_of_h[1] - (h * domain.element(i)));
+            assert_eq!(lhs, rhs);
+        }
+    }
+}

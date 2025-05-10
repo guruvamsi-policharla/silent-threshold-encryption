@@ -2,10 +2,7 @@ use ark_ec::pairing::Pairing;
 use ark_std::Zero;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use silent_threshold_encryption::{
-    crs::CRS,
-    decryption::agg_dec,
-    encryption::encrypt,
-    setup::{AggregateKey, SecretKey},
+    aggregate::AggregateKey, crs::CRS, decryption::agg_dec, encryption::encrypt, setup::SecretKey,
 };
 
 type E = ark_bls12_381::Bls12_381;
