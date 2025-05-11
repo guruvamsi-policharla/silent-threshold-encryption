@@ -22,11 +22,11 @@ pub fn main() {
         .map(|i| {
             println!("Processing key pair {}/{}", i + 1, m);
             let sk = SecretKey::<E>::new(&mut ark_std::test_rng());
-            let pk = sk.get_pk(&crs);
+            let pk = sk.get_pk(i, &crs);
             (sk, pk)
         })
         .unzip();
 
     println!("Setting up system public keys");
-    let _system_keys = SystemPublicKeys::<E>::new(pk.clone(), &crs, lag_polys, 3);
+    let _system_keys = SystemPublicKeys::<E>::new(pk.clone(), &crs, &lag_polys, 3);
 }

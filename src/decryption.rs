@@ -19,15 +19,14 @@ pub fn agg_dec<E: Pairing>(
     agg_key: &AggregateKey<E>,
     crs: &CRS<E>,
 ) -> Vec<u8> {
-    let n = agg_key.pk.len();
-    let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
+    let domain = Radix2EvaluationDomain::<E::ScalarField>::new(crs.n).unwrap();
     let domain_elements: Vec<E::ScalarField> = domain.elements().collect();
 
     // points is where B is set to zero
     // parties is the set of parties who have signed
     let mut points = vec![];
     let mut parties: Vec<usize> = Vec::new(); // parties indexed from 0..n-1
-    for i in 0..n {
+    for i in 0..crs.n {
         if selector[i] {
             parties.push(i);
         } else {
@@ -56,17 +55,17 @@ pub fn agg_dec<E: Pairing>(
     let mut bhat_coeffs = vec![E::ScalarField::zero(); ct.t];
     bhat_coeffs.append(&mut b.coeffs.clone());
     let bhat = DensePolynomial::from_coefficients_vec(bhat_coeffs);
-    debug_assert_eq!(bhat.degree(), n);
+    debug_assert_eq!(bhat.degree(), crs.n);
 
     let bhat_g1: E::G1 = crs.commit_g1(&bhat.coeffs);
 
-    let n_inv = E::ScalarField::one() / E::ScalarField::from((n) as u32);
+    let n_inv = E::ScalarField::one() / E::ScalarField::from(crs.n as u32);
 
     // compute the aggregate public key
     let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
     let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        bases.push(agg_key.pk[i].bls_pk.into());
+        bases.push(agg_key.lag_pks[i].bls_pk.into());
         scalars.push(b_evals[i]);
     }
     let mut apk = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
@@ -86,7 +85,7 @@ pub fn agg_dec<E: Pairing>(
     let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
     let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        bases.push(agg_key.pk[i].sk_li_x.into());
+        bases.push(agg_key.lag_pks[i].sk_li_x.into());
         scalars.push(b_evals[i]);
     }
     let qx = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
@@ -94,7 +93,7 @@ pub fn agg_dec<E: Pairing>(
     let mut bases: Vec<<E as Pairing>::G1Affine> = Vec::new();
     let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        bases.push(agg_key.pk[i].sk_li_minus0.into());
+        bases.push(agg_key.lag_pks[i].sk_li_minus0.into());
         scalars.push(b_evals[i]);
     }
     let qhatx = E::G1::msm(bases.as_slice(), scalars.as_slice()).unwrap();
@@ -169,7 +168,7 @@ mod tests {
         let pk = sk
             .iter()
             .enumerate()
-            .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
+            .map(|(i, sk)| sk.get_lagrange_pk(i, i, &crs))
             .collect::<Vec<_>>();
 
         let agg_key = AggregateKey::<E>::new(pk, &crs);

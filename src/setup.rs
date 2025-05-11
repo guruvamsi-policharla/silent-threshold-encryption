@@ -80,7 +80,7 @@ impl<F: FftField> LagPolys<F> {
             l_minus0,
             l_x,
             li_lj_z,
-            denom,
+            denom: denom.inverse().unwrap(),
         }
     }
 }
@@ -96,12 +96,14 @@ pub struct PublicKey<E: Pairing> {
     pub bls_pk: E::G1,           //BLS pk
     pub hints: Vec<E::G1Affine>, //hints
     pub y: Vec<E::G1Affine>, // preprocessed toeplitz matrix. only for efficiency and can be computed from hints
+    pub id: usize,           // canonically assigned unique id in the system
 }
 
 /// Public key that can only be used in a fixed position -- faster to aggregate
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct LagPublicKey<E: Pairing> {
-    pub id: usize,
+    pub id: usize,              //id of the party
+    pub position: usize,        //position in the aggregate key
     pub bls_pk: E::G1,          //BLS pk
     pub sk_li: E::G1,           //hint
     pub sk_li_minus0: E::G1,    //hint
@@ -112,6 +114,7 @@ pub struct LagPublicKey<E: Pairing> {
 impl<E: Pairing> LagPublicKey<E> {
     pub fn new(
         id: usize,
+        position: usize,
         bls_pk: E::G1,
         sk_li: E::G1,
         sk_li_minus0: E::G1,
@@ -120,6 +123,7 @@ impl<E: Pairing> LagPublicKey<E> {
     ) -> Self {
         LagPublicKey {
             id,
+            position,
             bls_pk,
             sk_li,
             sk_li_minus0,
@@ -140,7 +144,7 @@ impl<E: Pairing> SecretKey<E> {
         SecretKey { sk }
     }
 
-    pub fn get_pk(&self, crs: &CRS<E>) -> PublicKey<E> {
+    pub fn get_pk(&self, id: usize, crs: &CRS<E>) -> PublicKey<E> {
         let mut hints = vec![E::G1Affine::zero(); crs.powers_of_g.len()];
 
         let bls_pk = E::G1::generator() * self.sk;
@@ -155,24 +159,30 @@ impl<E: Pairing> SecretKey<E> {
             y[i] = (crs.y[i] * self.sk).into();
         }
 
-        PublicKey { bls_pk, hints, y }
+        PublicKey {
+            bls_pk,
+            hints,
+            y,
+            id,
+        }
     }
 
-    pub fn get_lagrange_pk(&self, id: usize, crs: &CRS<E>) -> LagPublicKey<E> {
+    pub fn get_lagrange_pk(&self, position: usize, id: usize, crs: &CRS<E>) -> LagPublicKey<E> {
         let mut sk_li_lj_z = vec![];
 
-        let sk_li = crs.li[id] * self.sk;
+        let sk_li = crs.li[position] * self.sk;
 
-        let sk_li_minus0 = crs.li_minus0[id] * self.sk;
+        let sk_li_minus0 = crs.li_minus0[position] * self.sk;
 
-        let sk_li_x = crs.li_x[id] * self.sk;
+        let sk_li_x = crs.li_x[position] * self.sk;
 
         for j in 0..crs.n {
-            sk_li_lj_z.push(crs.li_lj_z[id][j] * self.sk);
+            sk_li_lj_z.push(crs.li_lj_z[position][j] * self.sk);
         }
 
         LagPublicKey {
             id,
+            position,
             bls_pk: E::G1::generator() * self.sk,
             sk_li,
             sk_li_minus0,
@@ -189,32 +199,32 @@ impl<E: Pairing> SecretKey<E> {
 impl<E: Pairing> PublicKey<E> {
     pub fn get_lag_public_key(
         &self,
-        id: usize,
+        position: usize,
         crs: &CRS<E>,
         lag_polys: &LagPolys<E::ScalarField>,
     ) -> LagPublicKey<E> {
-        assert!(id < crs.n, "position out of bounds");
+        assert!(position < crs.n, "position out of bounds");
 
         let bls_pk = self.bls_pk;
 
         // compute sk_li
         let sk_li = E::G1::msm(
-            &self.hints[0..lag_polys.l[id].degree() + 1],
-            &lag_polys.l[id],
+            &self.hints[0..lag_polys.l[position].degree() + 1],
+            &lag_polys.l[position],
         )
         .unwrap();
 
         // compute sk_li_minus0
         let sk_li_minus0 = E::G1::msm(
-            &self.hints[0..lag_polys.l_minus0[id].degree() + 1],
-            &lag_polys.l_minus0[id],
+            &self.hints[0..lag_polys.l_minus0[position].degree() + 1],
+            &lag_polys.l_minus0[position],
         )
         .unwrap();
 
         // compute sk_li_x
         let sk_li_x = E::G1::msm(
-            &self.hints[0..lag_polys.l_x[id].degree() + 1],
-            &lag_polys.l_x[id],
+            &self.hints[0..lag_polys.l_x[position].degree() + 1],
+            &lag_polys.l_x[position],
         )
         .unwrap();
 
@@ -225,9 +235,9 @@ impl<E: Pairing> PublicKey<E> {
         // crs is {g^sk, g^{sk * tau}, g^{sk * tau^2}, ...}
         // todo: move to https://eprint.iacr.org/2024/1279.pdf
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(crs.n).unwrap();
-        let mut sk_li_lj_z = open_all_values::<E>(&self.y, &lag_polys.l[id].coeffs, &domain);
+        let mut sk_li_lj_z = open_all_values::<E>(&self.y, &lag_polys.l[position].coeffs, &domain);
         for j in 0..crs.n {
-            sk_li_lj_z[j] *= domain.element(j) / lag_polys.denom;
+            sk_li_lj_z[j] *= domain.element(j) * lag_polys.denom;
         }
 
         // // compute sk_li_lj_z
@@ -246,7 +256,8 @@ impl<E: Pairing> PublicKey<E> {
         // assert_eq!(sk_li_lj_z, my_sk_li_lj_z);
 
         LagPublicKey {
-            id,
+            id: self.id,
+            position,
             bls_pk,
             sk_li,
             sk_li_minus0,
@@ -275,8 +286,8 @@ mod tests {
 
         for i in 0..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_lagrange_pk(i, &crs));
-            lagrange_pk.push(sk[i].get_lagrange_pk(i, &crs));
+            pk.push(sk[i].get_lagrange_pk(i, i, &crs));
+            lagrange_pk.push(sk[i].get_lagrange_pk(i, i, &crs));
 
             assert_eq!(pk[i].sk_li, lagrange_pk[i].sk_li);
             assert_eq!(pk[i].sk_li_minus0, lagrange_pk[i].sk_li_minus0);
@@ -295,10 +306,10 @@ mod tests {
         let lagpolys = LagPolys::<F>::new(n);
 
         let sk = SecretKey::<E>::new(&mut rng);
-        let pk = sk.get_pk(&crs);
-        let lag_pk = sk.get_lagrange_pk(n - 1, &crs);
+        let pk = sk.get_pk(0, &crs);
+        let lag_pk = sk.get_lagrange_pk(0, 0, &crs);
 
-        let computed_lag_pk = pk.get_lag_public_key(n - 1, &crs, &lagpolys);
+        let computed_lag_pk = pk.get_lag_public_key(0, &crs, &lagpolys);
 
         assert_eq!(computed_lag_pk.bls_pk, lag_pk.bls_pk);
         assert_eq!(computed_lag_pk.sk_li, lag_pk.sk_li);

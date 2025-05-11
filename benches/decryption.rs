@@ -25,7 +25,7 @@ fn bench_decrypt(c: &mut Criterion) {
         let pk = sk
             .iter()
             .enumerate()
-            .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
+            .map(|(i, sk)| sk.get_lagrange_pk(i, i, &crs))
             .collect::<Vec<_>>();
 
         let agg_key = AggregateKey::<E>::new(pk, &crs);

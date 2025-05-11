@@ -126,7 +126,7 @@ mod tests {
 
         for i in 0..n {
             sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_lagrange_pk(i, &crs))
+            pk.push(sk[i].get_lagrange_pk(i, i, &crs))
         }
 
         let ak = AggregateKey::<E>::new(pk, &crs);
