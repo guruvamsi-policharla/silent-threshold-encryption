@@ -126,7 +126,7 @@ impl<E: Pairing> SystemPublicKeys<E> {
         let mut edges = vec![];
         for &node in set {
             for j in 0..self.k {
-                edges.push((node, crs.n + self.lag_pks[node][j].position));
+                edges.push((node, self.m + self.lag_pks[node][j].position));
             }
         }
 
@@ -146,7 +146,7 @@ impl<E: Pairing> SystemPublicKeys<E> {
         assigned_nodes.sort();
         assigned_positions.sort();
 
-        let mut unassigned_positions: Vec<_> = (crs.n..2 * crs.n)
+        let mut unassigned_positions: Vec<_> = (self.m..self.m + crs.n)
             .filter(|position| assigned_positions.binary_search(position).is_err())
             .collect();
 
@@ -160,13 +160,12 @@ impl<E: Pairing> SystemPublicKeys<E> {
 
         // sort res based on the second element of the tuple
         res.sort_by_key(|&(_, position)| position);
-        // subtract crs.n from the second element of the tuple
+        // subtract m from the second element of the tuple
         res.iter_mut().for_each(|&mut (_, ref mut position)| {
-            *position -= crs.n;
+            *position -= self.m;
         });
 
         println!("Matching Size: {}/{}", res.len(), crs.n);
-        println!("Matching: {:?}", res);
         // create a new vector of lag public keys
         let mut set_lag_pks = vec![];
         for i in 0..res.len() {
@@ -179,10 +178,8 @@ impl<E: Pairing> SystemPublicKeys<E> {
                 .iter()
                 .find(|&lag_pk| lag_pk.position == position)
             {
-                println!("Found lag_pk for position: {}", position);
                 set_lag_pks.push(lag_pk.clone());
             } else {
-                println!("Creating new lag_pk for position: {}", position);
                 set_lag_pks.push(self.pks[node].get_lag_public_key(position, crs, &lag_polys));
             }
         }
