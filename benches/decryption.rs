@@ -1,12 +1,13 @@
-use ark_ec::pairing::Pairing;
-use ark_std::Zero;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use silent_threshold_encryption::{
-    aggregate::AggregateKey, crs::CRS, decryption::agg_dec, encryption::encrypt, setup::SecretKey,
+    aggregate::AggregateKey,
+    crs::CRS,
+    decryption::agg_dec,
+    encryption::encrypt,
+    setup::{PartialDecryption, SecretKey},
 };
 
 type E = ark_bls12_381::Bls12_381;
-type G2 = <E as Pairing>::G2;
 
 fn bench_decrypt(c: &mut Criterion) {
     let mut rng = ark_std::test_rng();
@@ -19,13 +20,13 @@ fn bench_decrypt(c: &mut Criterion) {
         let crs = CRS::<E>::new(n, &mut rng);
 
         let sk = (0..n)
-            .map(|_| SecretKey::<E>::new(&mut rng))
+            .map(|i| SecretKey::<E>::new(&mut rng, i))
             .collect::<Vec<_>>();
 
         let pk = sk
             .iter()
             .enumerate()
-            .map(|(i, sk)| sk.get_lagrange_pk(i, i, &crs))
+            .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
             .collect::<Vec<_>>();
 
         let agg_key = AggregateKey::<E>::new(pk, &crs);
@@ -33,12 +34,12 @@ fn bench_decrypt(c: &mut Criterion) {
         let ct = encrypt::<E>(&agg_key, t, &crs, msg);
 
         // compute partial decryptions
-        let mut partial_decryptions: Vec<G2> = Vec::new();
+        let mut partial_decryptions: Vec<PartialDecryption<E>> = Vec::new();
         for i in 0..t {
             partial_decryptions.push(sk[i].partial_decryption(&ct));
         }
         for _ in t..n {
-            partial_decryptions.push(G2::zero());
+            partial_decryptions.push(PartialDecryption::zero());
         }
 
         // compute the decryption key

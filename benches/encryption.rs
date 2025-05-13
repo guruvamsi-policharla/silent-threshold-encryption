@@ -12,13 +12,13 @@ fn bench_encrypt(c: &mut Criterion) {
     let crs = CRS::<E>::new(n, &mut rng);
 
     let sk = (0..n)
-        .map(|_| SecretKey::<E>::new(&mut rng))
+        .map(|i| SecretKey::<E>::new(&mut rng, i))
         .collect::<Vec<_>>();
 
     let pk = sk
         .iter()
         .enumerate()
-        .map(|(i, sk)| sk.get_lagrange_pk(i, i, &crs))
+        .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
         .collect::<Vec<_>>();
 
     let agg_key = AggregateKey::<E>::new(pk, &crs);

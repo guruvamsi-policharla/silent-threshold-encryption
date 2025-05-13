@@ -11,10 +11,10 @@ fn bench_setup(c: &mut Criterion) {
     for size in 3..=7 {
         let n = 1 << size;
         let crs = CRS::<E>::new(n, &mut rng);
-        let sk = SecretKey::<E>::new(&mut rng);
+        let sk = SecretKey::<E>::new(&mut rng, 0);
 
         group.bench_with_input(BenchmarkId::from_parameter(n), &crs, |b, inp| {
-            b.iter(|| sk.get_lagrange_pk(0, 0, &inp));
+            b.iter(|| sk.get_lagrange_pk(0, &inp));
         });
     }
 

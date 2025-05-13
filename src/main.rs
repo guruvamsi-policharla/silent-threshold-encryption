@@ -21,8 +21,8 @@ pub fn main() {
         .into_par_iter()
         .map(|i| {
             println!("Processing key pair {}/{}", i + 1, m);
-            let sk = SecretKey::<E>::new(&mut ark_std::test_rng());
-            let pk = sk.get_pk(i, &crs);
+            let sk = SecretKey::<E>::new(&mut ark_std::test_rng(), i);
+            let pk = sk.get_pk(&crs);
             (sk, pk)
         })
         .unzip();

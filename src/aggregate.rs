@@ -209,8 +209,8 @@ mod tests {
         let (_sk, pk): (Vec<_>, Vec<_>) = (0..m)
             .into_par_iter()
             .map(|i| {
-                let sk = SecretKey::<E>::new(&mut ark_std::test_rng());
-                let pk = sk.get_pk(i, &crs);
+                let sk = SecretKey::<E>::new(&mut ark_std::test_rng(), i);
+                let pk = sk.get_pk(&crs);
                 (sk, pk)
             })
             .unzip();

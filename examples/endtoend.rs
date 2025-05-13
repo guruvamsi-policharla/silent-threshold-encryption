@@ -1,15 +1,13 @@
-use ark_ec::pairing::Pairing;
-use ark_std::{end_timer, start_timer, Zero};
+use ark_std::{end_timer, start_timer};
 use silent_threshold_encryption::{
     aggregate::SystemPublicKeys,
     crs::CRS,
     decryption::agg_dec,
     encryption::encrypt,
-    setup::{LagPolys, SecretKey},
+    setup::{LagPolys, PartialDecryption, SecretKey},
 };
 
 type E = ark_bls12_381::Bls12_381;
-type G2 = <E as Pairing>::G2;
 use rand::seq::IteratorRandom;
 
 fn main() {
@@ -27,13 +25,9 @@ fn main() {
 
     println!("Setting up key pairs for {} parties", m);
     let sk = (0..m)
-        .map(|_| SecretKey::<E>::new(&mut rng))
+        .map(|i| SecretKey::<E>::new(&mut rng, i))
         .collect::<Vec<_>>();
-    let pk = sk
-        .iter()
-        .enumerate()
-        .map(|(i, sk)| sk.get_pk(i, &crs))
-        .collect::<Vec<_>>();
+    let pk = sk.iter().map(|sk| sk.get_pk(&crs)).collect::<Vec<_>>();
 
     let setup_timer = start_timer!(|| "Setting up system keys");
     let system_keys = SystemPublicKeys::<E>::new(pk.clone(), &crs, &lag_polys, k);
@@ -56,7 +50,7 @@ fn main() {
     let signer_positions = (0..crs.n).choose_multiple(&mut thread_rng, t);
 
     let mut selector: Vec<bool> = vec![false; n];
-    let mut partial_decryptions: Vec<G2> = vec![G2::zero(); n];
+    let mut partial_decryptions: Vec<PartialDecryption<E>> = vec![PartialDecryption::zero(); n];
 
     for i in signer_positions {
         selector[i] = true;

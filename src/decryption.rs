@@ -10,10 +10,13 @@ use aes_gcm::{aead::Aead, Aes256Gcm, Key, KeyInit};
 use hkdf::Hkdf;
 use sha2::Sha256;
 
-use crate::{aggregate::AggregateKey, crs::CRS, encryption::Ciphertext, utils::interp_mostly_zero};
+use crate::{
+    aggregate::AggregateKey, crs::CRS, encryption::Ciphertext, setup::PartialDecryption,
+    utils::interp_mostly_zero,
+};
 
 pub fn agg_dec<E: Pairing>(
-    partial_decryptions: &[E::G2], //insert 0 if a party did not respond or verification failed
+    partial_decryptions: &Vec<PartialDecryption<E>>, //insert 0 if a party did not respond or verification failed
     ct: &Ciphertext<E>,
     selector: &[bool],
     agg_key: &AggregateKey<E>,
@@ -75,7 +78,7 @@ pub fn agg_dec<E: Pairing>(
     let mut bases: Vec<<E as Pairing>::G2Affine> = Vec::new();
     let mut scalars: Vec<<E as Pairing>::ScalarField> = Vec::new();
     for &i in &parties {
-        bases.push(partial_decryptions[i].into());
+        bases.push(partial_decryptions[i].signature.into());
         scalars.push(b_evals[i]);
     }
     let mut sigma = E::G2::msm(bases.as_slice(), scalars.as_slice()).unwrap();
@@ -145,10 +148,13 @@ pub fn agg_dec<E: Pairing>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{crs::CRS, encryption::encrypt, setup::SecretKey};
+    use crate::{
+        crs::CRS,
+        encryption::encrypt,
+        setup::{PartialDecryption, SecretKey},
+    };
 
     type E = ark_bls12_381::Bls12_381;
-    type G2 = <E as Pairing>::G2;
 
     #[test]
     fn test_decryption() {
@@ -162,25 +168,25 @@ mod tests {
         let msg = b"Hello, world!";
 
         let sk = (0..n)
-            .map(|_| SecretKey::<E>::new(&mut rng))
+            .map(|i| SecretKey::<E>::new(&mut rng, i))
             .collect::<Vec<_>>();
 
         let pk = sk
             .iter()
             .enumerate()
-            .map(|(i, sk)| sk.get_lagrange_pk(i, i, &crs))
+            .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
             .collect::<Vec<_>>();
 
         let agg_key = AggregateKey::<E>::new(pk, &crs);
         let ct = encrypt::<E>(&agg_key, t, &crs, msg);
 
         // compute partial decryptions
-        let mut partial_decryptions: Vec<G2> = Vec::new();
+        let mut partial_decryptions: Vec<PartialDecryption<E>> = Vec::new();
         for i in 0..t {
             partial_decryptions.push(sk[i].partial_decryption(&ct));
         }
         for _ in t..n {
-            partial_decryptions.push(G2::zero());
+            partial_decryptions.push(PartialDecryption::<E>::zero());
         }
 
         // compute the decryption key

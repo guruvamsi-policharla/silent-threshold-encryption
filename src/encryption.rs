@@ -8,14 +8,25 @@ use aes_gcm::{aead::Aead, Aes256Gcm, Key, KeyInit};
 use hkdf::Hkdf;
 use sha2::Sha256;
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+use crate::utils::{ark_de, ark_se};
+use serde::{Deserialize, Serialize};
+
+#[derive(
+    Debug, CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone, PartialEq,
+)]
 pub struct Ciphertext<E: Pairing> {
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub gamma_g2: E::G2,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub sa1: [E::G1; 2],
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub sa2: [E::G2; 6],
+    // #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     // pub enc_key: PairingOutput<E>, // key to be used for encapsulation (linearly homomorphic)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub ct: Vec<u8>, //encrypted message
-    pub t: usize,    //threshold
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub t: usize, //threshold
 }
 
 impl<E: Pairing> Ciphertext<E> {
@@ -125,8 +136,8 @@ mod tests {
         let mut pk: Vec<LagPublicKey<E>> = Vec::new();
 
         for i in 0..n {
-            sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_lagrange_pk(i, i, &crs))
+            sk.push(SecretKey::<E>::new(&mut rng, i));
+            pk.push(sk[i].get_lagrange_pk(i, &crs))
         }
 
         let ak = AggregateKey::<E>::new(pk, &crs);

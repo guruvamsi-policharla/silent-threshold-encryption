@@ -10,6 +10,9 @@ use ark_poly::{
 use ark_serialize::*;
 use ark_std::{rand::RngCore, UniformRand, Zero};
 
+use crate::utils::{ark_de, ark_se};
+use serde::{Deserialize, Serialize};
+
 #[derive(Clone)]
 pub struct LagPolys<F: FftField> {
     pub l: Vec<DensePolynomial<F>>,
@@ -87,7 +90,26 @@ impl<F: FftField> LagPolys<F> {
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SecretKey<E: Pairing> {
+    pub id: usize,
     sk: E::ScalarField,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PartialDecryption<E: Pairing> {
+    /// Party id
+    pub id: usize,
+    /// Party commitment
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub signature: E::G2,
+}
+
+impl<E: Pairing> PartialDecryption<E> {
+    pub fn zero() -> Self {
+        PartialDecryption {
+            id: 0,
+            signature: E::G2::zero(),
+        }
+    }
 }
 
 /// Position oblivious public key -- slower to aggregate
@@ -134,17 +156,18 @@ impl<E: Pairing> LagPublicKey<E> {
 }
 
 impl<E: Pairing> SecretKey<E> {
-    pub fn new<R: RngCore>(rng: &mut R) -> Self {
+    pub fn new<R: RngCore>(rng: &mut R, id: usize) -> Self {
         SecretKey {
+            id,
             sk: E::ScalarField::rand(rng),
         }
     }
 
-    pub fn from_scalar(sk: E::ScalarField) -> Self {
-        SecretKey { sk }
+    pub fn from_scalar(sk: E::ScalarField, id: usize) -> Self {
+        SecretKey { id, sk }
     }
 
-    pub fn get_pk(&self, id: usize, crs: &CRS<E>) -> PublicKey<E> {
+    pub fn get_pk(&self, crs: &CRS<E>) -> PublicKey<E> {
         let mut hints = vec![E::G1Affine::zero(); crs.powers_of_g.len()];
 
         let bls_pk = E::G1::generator() * self.sk;
@@ -160,14 +183,14 @@ impl<E: Pairing> SecretKey<E> {
         }
 
         PublicKey {
+            id: self.id,
             bls_pk,
             hints,
             y,
-            id,
         }
     }
 
-    pub fn get_lagrange_pk(&self, position: usize, id: usize, crs: &CRS<E>) -> LagPublicKey<E> {
+    pub fn get_lagrange_pk(&self, position: usize, crs: &CRS<E>) -> LagPublicKey<E> {
         let mut sk_li_lj_z = vec![];
 
         let sk_li = crs.li[position] * self.sk;
@@ -181,7 +204,7 @@ impl<E: Pairing> SecretKey<E> {
         }
 
         LagPublicKey {
-            id,
+            id: self.id,
             position,
             bls_pk: E::G1::generator() * self.sk,
             sk_li,
@@ -191,8 +214,11 @@ impl<E: Pairing> SecretKey<E> {
         }
     }
 
-    pub fn partial_decryption(&self, ct: &Ciphertext<E>) -> E::G2 {
-        ct.gamma_g2 * self.sk // kind of a bls signature on gamma_g2
+    pub fn partial_decryption(&self, ct: &Ciphertext<E>) -> PartialDecryption<E> {
+        PartialDecryption {
+            id: self.id,
+            signature: ct.gamma_g2 * self.sk, // bls signature on gamma_g2
+        }
     }
 }
 
@@ -285,9 +311,9 @@ mod tests {
         let mut lagrange_pk: Vec<LagPublicKey<E>> = Vec::new();
 
         for i in 0..n {
-            sk.push(SecretKey::<E>::new(&mut rng));
-            pk.push(sk[i].get_lagrange_pk(i, i, &crs));
-            lagrange_pk.push(sk[i].get_lagrange_pk(i, i, &crs));
+            sk.push(SecretKey::<E>::new(&mut rng, i));
+            pk.push(sk[i].get_lagrange_pk(i, &crs));
+            lagrange_pk.push(sk[i].get_lagrange_pk(i, &crs));
 
             assert_eq!(pk[i].sk_li, lagrange_pk[i].sk_li);
             assert_eq!(pk[i].sk_li_minus0, lagrange_pk[i].sk_li_minus0);
@@ -305,9 +331,9 @@ mod tests {
         let crs = CRS::<E>::new(n, &mut rng);
         let lagpolys = LagPolys::<F>::new(n);
 
-        let sk = SecretKey::<E>::new(&mut rng);
-        let pk = sk.get_pk(0, &crs);
-        let lag_pk = sk.get_lagrange_pk(0, 0, &crs);
+        let sk = SecretKey::<E>::new(&mut rng, 0);
+        let pk = sk.get_pk(&crs);
+        let lag_pk = sk.get_lagrange_pk(0, &crs);
 
         let computed_lag_pk = pk.get_lag_public_key(0, &crs, &lagpolys);
 
