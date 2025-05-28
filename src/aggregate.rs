@@ -67,6 +67,10 @@ impl<E: Pairing> SystemPublicKeys<E> {
         lag_polys: &LagPolys<E::ScalarField>,
         k: usize,
     ) -> Self {
+        debug_assert!(
+            crs.n > k, "{}",
+            format!("CRS size (n = {}) must be greater than k (k = {})", crs.n, k
+        ));
         // using a deterministic seed for reproducibility across machines
         // can derandomize using a random oracle
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
