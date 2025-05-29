@@ -1,25 +1,34 @@
 use crate::crs::CRS;
 use crate::setup::{LagPolys, LagPublicKey, PublicKey};
+use crate::utils::{ark_de, ark_se};
 use ark_ec::pairing::{Pairing, PairingOutput};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{end_timer, start_timer, One, Zero};
 use hopcroft_karp::matching;
 use rand::Rng;
 use rand::SeedableRng;
+use serde::{Deserialize, Serialize};
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
-pub struct AggregateKey<E: Pairing> {
-    pub lag_pks: Vec<LagPublicKey<E>>,
-    pub agg_sk_li_lj_z: Vec<E::G1>,
+#[derive(CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone)]
+pub struct EncryptionKey<E: Pairing> {
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub ask: E::G1,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub z_g2: E::G2,
-
-    //preprocessed values
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub e_gh: PairingOutput<E>,
 }
 
+#[derive(CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone)]
+pub struct AggregateKey<E: Pairing> {
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub lag_pks: Vec<LagPublicKey<E>>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub agg_sk_li_lj_z: Vec<E::G1>,
+}
+
 impl<E: Pairing> AggregateKey<E> {
-    pub fn new(lag_pks: Vec<LagPublicKey<E>>, crs: &CRS<E>) -> Self {
+    pub fn new(lag_pks: Vec<LagPublicKey<E>>, crs: &CRS<E>) -> (Self, EncryptionKey<E>) {
         let n = lag_pks.len();
         let z_g2 = crs.powers_of_h[n] + crs.powers_of_h[0] * (-E::ScalarField::one());
 
@@ -38,13 +47,17 @@ impl<E: Pairing> AggregateKey<E> {
             agg_sk_li_lj_z.push(agg_sk_li_lj_zi);
         }
 
-        AggregateKey {
-            lag_pks,
-            agg_sk_li_lj_z,
-            ask,
-            z_g2,
-            e_gh: E::pairing(crs.powers_of_g[0], crs.powers_of_h[0]),
-        }
+        (
+            AggregateKey {
+                lag_pks,
+                agg_sk_li_lj_z,
+            },
+            EncryptionKey {
+                ask,
+                z_g2,
+                e_gh: E::pairing(crs.powers_of_g[0], crs.powers_of_h[0]),
+            },
+        )
     }
 }
 
@@ -52,11 +65,13 @@ impl<E: Pairing> AggregateKey<E> {
 /// also maintains lagrange public keys for each party at k "random" positions
 /// this ensures that the public keys of any subset of n parties forms an "almost" perfect matching
 /// hence, allowing for efficient aggregation and decryption
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone)]
 pub struct SystemPublicKeys<E: Pairing> {
     pub m: usize,
     pub k: usize,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub pks: Vec<PublicKey<E>>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub lag_pks: Vec<Vec<LagPublicKey<E>>>,
 }
 
@@ -121,7 +136,7 @@ impl<E: Pairing> SystemPublicKeys<E> {
         set: &Vec<usize>, // subset of indexes to encrypt to
         crs: &CRS<E>,
         lag_polys: &LagPolys<E::ScalarField>,
-    ) -> AggregateKey<E> {
+    ) -> (AggregateKey<E>, EncryptionKey<E>) {
         // find the maximum matching between lag_public keys and positions
         let mut edges = vec![];
         for &node in set {

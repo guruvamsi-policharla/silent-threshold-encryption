@@ -8,6 +8,8 @@ use silent_threshold_encryption::{
 };
 
 type E = ark_bls12_381::Bls12_381;
+type G2 = <E as ark_ec::pairing::Pairing>::G2;
+use ark_std::UniformRand;
 
 fn bench_decrypt(c: &mut Criterion) {
     let mut rng = ark_std::test_rng();
@@ -29,9 +31,10 @@ fn bench_decrypt(c: &mut Criterion) {
             .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
             .collect::<Vec<_>>();
 
-        let agg_key = AggregateKey::<E>::new(pk, &crs);
+        let (ak, ek) = AggregateKey::<E>::new(pk, &crs);
         let msg = b"Hello, world!";
-        let ct = encrypt::<E>(&agg_key, t, &crs, msg);
+        let gamma_g2 = G2::rand(&mut rng);
+        let ct = encrypt::<E>(&ek, t, &crs, gamma_g2, msg);
 
         // compute partial decryptions
         let mut partial_decryptions: Vec<PartialDecryption<E>> = Vec::new();
@@ -53,7 +56,7 @@ fn bench_decrypt(c: &mut Criterion) {
 
         group.bench_with_input(
             BenchmarkId::from_parameter(n),
-            &(partial_decryptions, ct, selector, agg_key, crs),
+            &(partial_decryptions, ct, selector, ak, crs),
             |b, inp| {
                 b.iter(|| agg_dec(&inp.0, &inp.1, &inp.2, &inp.3, &inp.4));
             },

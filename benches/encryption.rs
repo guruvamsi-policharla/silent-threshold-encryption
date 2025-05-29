@@ -4,6 +4,8 @@ use silent_threshold_encryption::{
 };
 
 type E = ark_bls12_381::Bls12_381;
+type G2 = <E as ark_ec::pairing::Pairing>::G2;
+use ark_std::UniformRand;
 
 fn bench_encrypt(c: &mut Criterion) {
     let mut rng = ark_std::test_rng();
@@ -21,11 +23,13 @@ fn bench_encrypt(c: &mut Criterion) {
         .map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
         .collect::<Vec<_>>();
 
-    let agg_key = AggregateKey::<E>::new(pk, &crs);
+    let (_ak, ek) = AggregateKey::<E>::new(pk, &crs);
     let msg = b"Hello, world!";
 
+    let gamma_g2 = G2::rand(&mut rng);
+
     c.bench_function("encrypt", |b| {
-        b.iter(|| encrypt::<E>(&agg_key, t, &crs, msg))
+        b.iter(|| encrypt::<E>(&ek, t, &crs, gamma_g2, msg))
     });
 }
 

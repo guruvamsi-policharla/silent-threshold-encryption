@@ -6,8 +6,10 @@ use silent_threshold_encryption::{
     encryption::encrypt,
     setup::{LagPolys, PartialDecryption, SecretKey},
 };
-
 type E = ark_bls12_381::Bls12_381;
+type G2 = <E as ark_ec::pairing::Pairing>::G2;
+
+use ark_std::UniformRand;
 use rand::seq::IteratorRandom;
 
 fn main() {
@@ -36,13 +38,14 @@ fn main() {
     let subset_timer = start_timer!(|| "Computing the aggregate key of a subset");
     let mut thread_rng = rand::rng(); // Create a random number generator
     let subset = (0..m).choose_multiple(&mut thread_rng, n);
-    let subset_agg_key = system_keys.get_aggregate_key(&subset, &crs, &lag_polys);
+    let (ak, ek) = system_keys.get_aggregate_key(&subset, &crs, &lag_polys);
     end_timer!(subset_timer);
 
     let msg = b"Hello, world!";
 
     let enc_timer = start_timer!(|| "Encrypting a message");
-    let ct = encrypt::<E>(&subset_agg_key, t, &crs, msg);
+    let gamma_g2 = G2::rand(&mut rng);
+    let ct = encrypt::<E>(&ek, t, &crs, gamma_g2, msg);
     end_timer!(enc_timer);
 
     println!("Computing partial decryptions");
@@ -54,14 +57,14 @@ fn main() {
 
     for i in signer_positions {
         selector[i] = true;
-        let id = subset_agg_key.lag_pks[i].id;
+        let id = ak.lag_pks[i].id;
         partial_decryptions[i] = sk[id].partial_decryption(&ct);
     }
 
     // // compute partial decryptions
     // let mut partial_decryptions: Vec<G2> = Vec::new();
     // for i in 0..t {
-    //     let id = subset_agg_key.lag_pks[i].id;
+    //     let id = ak.lag_pks[i].id;
     //     partial_decryptions.push(sk[id].partial_decryption(&ct));
     // }
     // for _ in t..n {
@@ -78,7 +81,7 @@ fn main() {
     // }
 
     let dec_timer = start_timer!(|| "Aggregating partial decryptions and decrypting");
-    let dec_key = agg_dec(&partial_decryptions, &ct, &selector, &subset_agg_key, &crs);
+    let dec_key = agg_dec(&partial_decryptions, &ct, &selector, &ak, &crs);
     end_timer!(dec_timer);
     assert_eq!(dec_key, msg, "Decryption failed!");
     println!("Decryption successful!");

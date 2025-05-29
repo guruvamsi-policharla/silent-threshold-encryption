@@ -88,9 +88,10 @@ impl<F: FftField> LagPolys<F> {
     }
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone)]
 pub struct SecretKey<E: Pairing> {
     pub id: usize,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     sk: E::ScalarField,
 }
 
@@ -113,24 +114,32 @@ impl<E: Pairing> PartialDecryption<E> {
 }
 
 /// Position oblivious public key -- slower to aggregate
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone)]
 pub struct PublicKey<E: Pairing> {
-    pub bls_pk: E::G1,           //BLS pk
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub bls_pk: E::G1, //BLS pk
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub hints: Vec<E::G1Affine>, //hints
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub y: Vec<E::G1Affine>, // preprocessed toeplitz matrix. only for efficiency and can be computed from hints
-    pub id: usize,           // canonically assigned unique id in the system
+    pub id: usize, // canonically assigned unique id in the system
 }
 
 /// Public key that can only be used in a fixed position -- faster to aggregate
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone)]
 pub struct LagPublicKey<E: Pairing> {
-    pub id: usize,              //id of the party
-    pub position: usize,        //position in the aggregate key
-    pub bls_pk: E::G1,          //BLS pk
-    pub sk_li: E::G1,           //hint
-    pub sk_li_minus0: E::G1,    //hint
+    pub id: usize,       //id of the party
+    pub position: usize, //position in the aggregate key
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub bls_pk: E::G1, //BLS pk
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub sk_li: E::G1, //hint
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub sk_li_minus0: E::G1, //hint
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub sk_li_lj_z: Vec<E::G1>, //hint
-    pub sk_li_x: E::G1,         //hint
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub sk_li_x: E::G1, //hint
 }
 
 impl<E: Pairing> LagPublicKey<E> {
