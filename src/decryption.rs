@@ -148,7 +148,9 @@ mod tests {
 		setup::{PartialDecryption, SecretKey},
 	};
 
-	type E = ark_bls12_381::Bls12_381;
+    type E = ark_bls12_381::Bls12_381;
+    type G2 = <E as Pairing>::G2;
+    use ark_std::UniformRand;
 
 	#[test]
 	fn test_decryption() {
@@ -169,8 +171,10 @@ mod tests {
 			.map(|(i, sk)| sk.get_lagrange_pk(i, &crs))
 			.collect::<Vec<_>>();
 
-		let agg_key = AggregateKey::<E>::new(pk, &crs);
-		let ct = encrypt::<E>(&agg_key, t, &crs, msg);
+        let (ak, ek) = AggregateKey::<E>::new(pk, &crs);
+
+        let gamma_g2 = G2::rand(&mut rng);
+        let ct = encrypt::<E>(&ek, t, &crs, gamma_g2, msg);
 
 		// compute partial decryptions
 		let mut partial_decryptions: Vec<PartialDecryption<E>> = Vec::new();
@@ -190,6 +194,9 @@ mod tests {
 			selector.push(false);
 		}
 
-		assert_eq!(agg_dec(&partial_decryptions, &ct, &selector, &agg_key, &crs), msg);
-	}
+        assert_eq!(
+            agg_dec(&partial_decryptions, &ct, &selector, &ak, &crs),
+            msg
+        );
+    }
 }

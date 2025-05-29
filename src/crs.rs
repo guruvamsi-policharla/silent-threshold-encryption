@@ -1,4 +1,5 @@
 use crate::utils::lagrange_poly;
+use crate::utils::{ark_de, ark_se};
 use ark_ec::{pairing::Pairing, PrimeGroup, ScalarMul, VariableBaseMSM};
 use ark_ff::{Field, PrimeField};
 use ark_poly::{
@@ -7,27 +8,39 @@ use ark_poly::{
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{rand::Rng, One, UniformRand, Zero};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize)]
 pub struct CRS<E: Pairing> {
-	pub n: usize, // maximum number of parties in a committee
-	pub powers_of_g: Vec<E::G1Affine>,
-	pub powers_of_h: Vec<E::G2Affine>,
+    pub n: usize, // maximum number of parties in a committee
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub powers_of_g: Vec<E::G1Affine>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub powers_of_h: Vec<E::G2Affine>,
 
-	// preprocessed lagrange polynomials
-	pub li: Vec<E::G1>,
-	pub li_minus0: Vec<E::G1>,
-	pub li_x: Vec<E::G1>,
-	pub li_lj_z: Vec<Vec<E::G1>>,
+    // preprocessed lagrange polynomials
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li: Vec<E::G1>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li_minus0: Vec<E::G1>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li_x: Vec<E::G1>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li_lj_z: Vec<Vec<E::G1>>,
 
-	// preprocessed lagrange polynomials in g2 (only needed for verifying hints)
-	pub li_g2: Vec<E::G2>,
-	pub li_minus0_g2: Vec<E::G2>,
-	pub li_x_g2: Vec<E::G2>,
-	pub li_lj_z_g2: Vec<Vec<E::G2>>,
+    // preprocessed lagrange polynomials in g2 (only needed for verifying hints)
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li_g2: Vec<E::G2>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li_minus0_g2: Vec<E::G2>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li_x_g2: Vec<E::G2>,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub li_lj_z_g2: Vec<Vec<E::G2>>,
 
-	// preprocessed Toeplitz matrix
-	pub y: Vec<E::G1Affine>,
+    // preprocessed Toeplitz matrix
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
+    pub y: Vec<E::G1Affine>,
 }
 
 impl<E: Pairing> CRS<E> {
