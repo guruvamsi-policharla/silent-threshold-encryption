@@ -102,8 +102,8 @@ pub fn open_all_values<E: Pairing>(
     pi
 }
 
-/// interpolates a polynomial where evaluations on points are zero and the polynomial evaluates to 1 at the point 1
-/// but relies on the number of points being a power of 2
+/// interpolates a polynomial where evaluations on points are zero and the polynomial evaluates to 1
+/// at the point 1 but relies on the number of points being a power of 2
 /// currently not used as this portion is not a bottleneck
 // pub fn compute_vanishing_poly(points: &Vec<ScalarField>) -> DensePolynomial {
 //     let mut monomials = Vec::new();
@@ -139,8 +139,7 @@ pub fn open_all_values<E: Pairing>(
 #[cfg(test)]
 mod tests {
     use ark_bls12_381::Bls12_381;
-    use ark_ec::VariableBaseMSM;
-    use ark_ec::{bls12::Bls12, pairing::Pairing};
+    use ark_ec::{bls12::Bls12, pairing::Pairing, VariableBaseMSM};
     use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial};
     use ark_std::{UniformRand, Zero};
 

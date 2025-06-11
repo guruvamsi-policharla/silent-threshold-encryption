@@ -1,12 +1,13 @@
-use crate::crs::CRS;
-use crate::setup::{LagPolys, LagPublicKey, PublicKey};
-use crate::utils::{ark_de, ark_se};
+use crate::{
+    crs::CRS,
+    setup::{LagPolys, LagPublicKey, PublicKey},
+    utils::{ark_de, ark_se},
+};
 use ark_ec::pairing::{Pairing, PairingOutput};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{end_timer, start_timer, One, Zero};
 use hopcroft_karp::matching;
-use rand::Rng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone)]

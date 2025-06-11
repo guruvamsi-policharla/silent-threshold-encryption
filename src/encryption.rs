@@ -1,5 +1,4 @@
-use crate::aggregate::EncryptionKey;
-use crate::crs::CRS;
+use crate::{aggregate::EncryptionKey, crs::CRS};
 use ark_ec::{pairing::Pairing, PrimeGroup};
 use ark_serialize::*;
 use ark_std::UniformRand;

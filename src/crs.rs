@@ -1,5 +1,4 @@
-use crate::utils::lagrange_poly;
-use crate::utils::{ark_de, ark_se};
+use crate::utils::{ark_de, ark_se, lagrange_poly};
 use ark_ec::{pairing::Pairing, PrimeGroup, ScalarMul, VariableBaseMSM};
 use ark_ff::{Field, PrimeField};
 use ark_poly::{
@@ -122,7 +121,8 @@ impl<E: Pairing> CRS<E> {
             }
         }
 
-        // Compute the Toeplitz matrix preprocessing ==================================================
+        // Compute the Toeplitz matrix preprocessing
+        // ==================================================
         let mut top_tau = powers_of_tau.clone();
         top_tau.truncate(n);
         top_tau.reverse();
@@ -202,18 +202,13 @@ impl<E: Pairing> CRS<E> {
 
 #[cfg(test)]
 mod tests {
-    use ark_bls12_381::Bls12_381 as E;
-    use ark_bls12_381::Fr as F;
-    use ark_bls12_381::G1Projective as G1;
-    use ark_bls12_381::G2Projective as G2;
-    use ark_ec::pairing::Pairing;
-    use ark_ec::PrimeGroup;
-    use ark_poly::EvaluationDomain;
-    use ark_poly::Polynomial;
-    use ark_poly::Radix2EvaluationDomain;
-    use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
-    use ark_std::UniformRand;
-    use ark_std::Zero;
+    use ark_bls12_381::{Bls12_381 as E, Fr as F, G1Projective as G1, G2Projective as G2};
+    use ark_ec::{pairing::Pairing, PrimeGroup};
+    use ark_poly::{
+        univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
+        Radix2EvaluationDomain,
+    };
+    use ark_std::{UniformRand, Zero};
 
     #[test]
     fn test_sumcheck() {

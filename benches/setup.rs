@@ -4,7 +4,8 @@ use silent_threshold_encryption::{crs::CRS, setup::SecretKey};
 type E = ark_bls12_381::Bls12_381;
 
 fn bench_setup(c: &mut Criterion) {
-    // WARNING: This benchmark will take a very long time. It is only meant to measure the speedup when compared to the faster Lagrange setup
+    // WARNING: This benchmark will take a very long time. It is only meant to measure the speedup
+    // when compared to the faster Lagrange setup
     let mut group = c.benchmark_group("setup");
     group.sample_size(10);
     let mut rng = ark_std::test_rng();

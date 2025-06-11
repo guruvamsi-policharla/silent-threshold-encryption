@@ -1,6 +1,8 @@
-use crate::crs::CRS;
-use crate::encryption::Ciphertext;
-use crate::utils::{lagrange_poly, open_all_values};
+use crate::{
+    crs::CRS,
+    encryption::Ciphertext,
+    utils::{lagrange_poly, open_all_values},
+};
 use ark_ec::{pairing::Pairing, AffineRepr, PrimeGroup, VariableBaseMSM};
 use ark_ff::FftField;
 use ark_poly::{
@@ -121,7 +123,8 @@ pub struct PublicKey<E: Pairing> {
     #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub hints: Vec<E::G1Affine>, //hints
     #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub y: Vec<E::G1Affine>, // preprocessed toeplitz matrix. only for efficiency and can be computed from hints
+    pub y: Vec<E::G1Affine>, /* preprocessed toeplitz matrix. only for efficiency and can be
+                              * computed from hints */
     pub id: usize, // canonically assigned unique id in the system
 }
 

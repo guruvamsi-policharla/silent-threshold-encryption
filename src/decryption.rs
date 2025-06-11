@@ -16,7 +16,8 @@ use crate::{
 };
 
 pub fn agg_dec<E: Pairing>(
-    partial_decryptions: &Vec<PartialDecryption<E>>, //insert 0 if a party did not respond or verification failed
+    partial_decryptions: &Vec<PartialDecryption<E>>, /* insert 0 if a party did not respond or
+                                                      * verification failed */
     ct: &Ciphertext<E>,
     selector: &[bool],
     agg_key: &AggregateKey<E>,
