@@ -75,7 +75,7 @@ impl<E: Pairing> CRS<E> {
             li_evals_x[i] = li_evals_minus0[i] * tau2_inv;
         }
 
-        let z_eval = tau.pow(&[n as u64]) - E::ScalarField::one();
+        let z_eval = tau.pow([n as u64]) - E::ScalarField::one();
         let z_eval_inv = z_eval.inverse().unwrap();
 
         let mut li = vec![E::G1::zero(); n];
@@ -153,7 +153,7 @@ impl<E: Pairing> CRS<E> {
         }
     }
 
-    pub fn commit_g1(&self, coeffs: &Vec<E::ScalarField>) -> E::G1 {
+    pub fn commit_g1(&self, coeffs: &[E::ScalarField]) -> E::G1 {
         assert!(
             coeffs.len() <= self.powers_of_g.len(),
             "Too many coefficients for the given powers of tau"
@@ -166,7 +166,7 @@ impl<E: Pairing> CRS<E> {
         )
     }
 
-    pub fn commit_g2(&self, coeffs: &Vec<E::ScalarField>) -> E::G2 {
+    pub fn commit_g2(&self, coeffs: &[E::ScalarField]) -> E::G2 {
         assert!(
             coeffs.len() <= self.powers_of_g.len(),
             "Too many coefficients for the given powers of tau"
@@ -181,10 +181,10 @@ impl<E: Pairing> CRS<E> {
 
     pub fn compute_opening_proof(
         &self,
-        coeffs: &Vec<E::ScalarField>,
+        coeffs: &[E::ScalarField],
         point: &E::ScalarField,
     ) -> E::G1 {
-        let polynomial = DensePolynomial::from_coefficients_slice(&coeffs);
+        let polynomial = DensePolynomial::from_coefficients_slice(coeffs);
         let eval = polynomial.evaluate(point);
 
         let mut numerator = polynomial.clone();
