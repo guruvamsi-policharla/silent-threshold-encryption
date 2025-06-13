@@ -1,6 +1,6 @@
 use crate::{
     crs::CRS,
-    encryption::Ciphertext,
+    types::Ciphertext,
     utils::{lagrange_poly, open_all_values},
 };
 use ark_ec::{pairing::Pairing, AffineRepr, PrimeGroup, VariableBaseMSM};
@@ -31,8 +31,8 @@ impl<F: FftField> LagPolys<F> {
 
         // compute polynomial L_i(X)
         let mut l = vec![DensePolynomial::zero(); n];
-        for i in 0..n {
-            l[i] = lagrange_poly(n, i);
+        for (i, ell) in l.iter_mut().enumerate().take(n) {
+            *ell = lagrange_poly(n, i);
         }
 
         // compute polynomial (L_i(X) - L_i(0))*X
@@ -184,8 +184,8 @@ impl<E: Pairing> SecretKey<E> {
 
         let bls_pk = E::G1::generator() * self.sk;
 
-        for i in 0..crs.powers_of_g.len() {
-            hints[i] = (crs.powers_of_g[i] * self.sk).into();
+        for (i, hint) in hints.iter_mut().enumerate().take(crs.powers_of_g.len()) {
+            *hint = (crs.powers_of_g[i] * self.sk).into();
         }
 
         // compute y
@@ -274,8 +274,9 @@ impl<E: Pairing> PublicKey<E> {
         // todo: move to https://eprint.iacr.org/2024/1279.pdf
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(crs.n).unwrap();
         let mut sk_li_lj_z = open_all_values::<E>(&self.y, &lag_polys.l[position].coeffs, &domain);
-        for j in 0..crs.n {
-            sk_li_lj_z[j] *= domain.element(j) * lag_polys.denom;
+
+        for (j, s) in sk_li_lj_z.iter_mut().enumerate().take(crs.n) {
+            *s *= domain.element(j) * lag_polys.denom;
         }
 
         // // compute sk_li_lj_z
