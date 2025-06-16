@@ -123,7 +123,7 @@ impl<E: Pairing> SystemPublicKeys<E> {
             .for_each(|(i, lag_pk_i)| {
                 let mut lag_pk_inner = vec![];
                 for j in 0..k {
-                    lag_pk_inner.push(pks[i].get_lag_public_key(positions[i][j], crs, &lag_polys));
+                    lag_pk_inner.push(pks[i].get_lag_public_key(positions[i][j], crs, lag_polys));
                 }
                 *lag_pk_i = lag_pk_inner;
             });
@@ -184,19 +184,18 @@ impl<E: Pairing> SystemPublicKeys<E> {
         println!("Matching Size: {}/{}", res.len(), crs.n);
         // create a new vector of lag public keys
         let mut set_lag_pks = vec![];
-        for i in 0..res.len() {
-            let (node, position) = res[i];
+        for r in &res {
+            let (node, position) = r;
             // check if the position is already present in the lag_pk
             // and if so, push that lag_pk to the agg_pk
             // otherwise, create a new lag public key
-            // println!("Node: {}, Position: {}", node, position);
-            if let Some(lag_pk) = self.lag_pks[node]
+            if let Some(lag_pk) = self.lag_pks[*node]
                 .iter()
-                .find(|&lag_pk| lag_pk.position == position)
+                .find(|&lag_pk| lag_pk.position == *position)
             {
                 set_lag_pks.push(lag_pk.clone());
             } else {
-                set_lag_pks.push(self.pks[node].get_lag_public_key(position, crs, &lag_polys));
+                set_lag_pks.push(self.pks[*node].get_lag_public_key(*position, crs, lag_polys));
             }
         }
 

@@ -70,8 +70,8 @@ pub fn interp_mostly_zero<F: Field>(points: &Vec<F>) -> DensePolynomial<F> {
 /// See https://github.com/khovratovich/Kate/blob/master/Kate_amortized.pdf
 /// eprint version has a bug and hasn't been updated
 pub fn open_all_values<E: Pairing>(
-    y: &Vec<E::G1Affine>,
-    f: &Vec<E::ScalarField>,
+    y: &[E::G1Affine],
+    f: &[E::ScalarField],
     domain: &Radix2EvaluationDomain<E::ScalarField>,
 ) -> Vec<E::G1> {
     let top_domain = Radix2EvaluationDomain::<E::ScalarField>::new(2 * domain.size()).unwrap();
@@ -97,9 +97,7 @@ pub fn open_all_values<E: Pairing>(
     h.truncate(domain.size());
 
     // fft on h to get KZG proofs
-    let pi = domain.fft(&h);
-
-    pi
+    domain.fft(&h)
 }
 
 /// interpolates a polynomial where evaluations on points are zero and the polynomial evaluates to 1

@@ -1,4 +1,4 @@
-use crate::{aggregate::EncryptionKey, crs::CRS};
+use crate::{aggregate::EncryptionKey, crs::CRS, types::Ciphertext};
 use ark_ec::{pairing::Pairing, PrimeGroup};
 use ark_serialize::*;
 use ark_std::UniformRand;
@@ -7,39 +7,6 @@ use std::ops::Mul;
 use aes_gcm::{aead::Aead, Aes256Gcm, Key, KeyInit};
 use hkdf::Hkdf;
 use sha2::Sha256;
-
-use crate::utils::{ark_de, ark_se};
-use serde::{Deserialize, Serialize};
-
-#[derive(
-    Debug, CanonicalSerialize, CanonicalDeserialize, Serialize, Deserialize, Clone, PartialEq,
-)]
-pub struct Ciphertext<E: Pairing> {
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub gamma_g2: E::G2,
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub sa1: [E::G1; 2],
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub sa2: [E::G2; 6],
-    // #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    // pub enc_key: PairingOutput<E>, // key to be used for encapsulation (linearly homomorphic)
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub ct: Vec<u8>, //encrypted message
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    pub t: usize, //threshold
-}
-
-impl<E: Pairing> Ciphertext<E> {
-    pub fn new(gamma_g2: E::G2, sa1: [E::G1; 2], sa2: [E::G2; 6], ct: Vec<u8>, t: usize) -> Self {
-        Ciphertext {
-            gamma_g2,
-            sa1,
-            sa2,
-            ct,
-            t,
-        }
-    }
-}
 
 /// t is the threshold for encryption and apk is the aggregated public key
 pub fn encrypt<E: Pairing>(
@@ -99,7 +66,7 @@ pub fn encrypt<E: Pairing>(
 
     // encrypt the message m using the derived key
     let aes_key: &Key<Aes256Gcm> = &aes_key.into();
-    let cipher = Aes256Gcm::new(&aes_key);
+    let cipher = Aes256Gcm::new(aes_key);
     let ct = cipher.encrypt(&aes_nonce.into(), m).unwrap();
 
     Ciphertext {

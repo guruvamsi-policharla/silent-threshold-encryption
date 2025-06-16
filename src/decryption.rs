@@ -11,13 +11,13 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 
 use crate::{
-    aggregate::AggregateKey, crs::CRS, encryption::Ciphertext, setup::PartialDecryption,
+    aggregate::AggregateKey, crs::CRS, setup::PartialDecryption, types::Ciphertext,
     utils::interp_mostly_zero,
 };
 
 pub fn agg_dec<E: Pairing>(
-    partial_decryptions: &Vec<PartialDecryption<E>>, /* insert 0 if a party did not respond or
-                                                      * verification failed */
+    partial_decryptions: &[PartialDecryption<E>], /* insert 0 if a party did not respond or
+                                                   * verification failed */
     ct: &Ciphertext<E>,
     selector: &[bool],
     agg_key: &AggregateKey<E>,
@@ -141,7 +141,7 @@ pub fn agg_dec<E: Pairing>(
 
     // encrypt the message m using the derived key
     let aes_key: &Key<Aes256Gcm> = &aes_key.into();
-    let cipher = Aes256Gcm::new(&aes_key);
+    let cipher = Aes256Gcm::new(aes_key);
 
     cipher.decrypt(&aes_nonce.into(), ct.ct.as_ref()).unwrap()
 }
