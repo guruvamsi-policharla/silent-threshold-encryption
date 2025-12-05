@@ -1,33 +1,28 @@
-use ark_ec::pairing::PairingOutput;
-// use crate::utils::{lagrange_coefficients, transpose};
+use blstrs::{G1Affine, G1Projective, G2Affine, G2Projective, Gt, Scalar};
+use ff::Field;
+use group::Group;
+use serde::{Deserialize, Serialize};
+
 use crate::encryption::Ciphertext;
 use crate::kzg::{PowersOfTau, KZG10};
+use crate::polynomial::{DensePolynomial, Radix2EvaluationDomain};
 use crate::utils::lagrange_poly;
-use ark_ec::{pairing::Pairing, PrimeGroup};
-use ark_ff::Field;
-use ark_poly::{
-    domain::EvaluationDomain, univariate::DensePolynomial, DenseUVPolynomial, Polynomial,
-    Radix2EvaluationDomain,
-};
-use ark_serialize::*;
-use ark_std::{rand::RngCore, One, UniformRand, Zero};
 use rayon::prelude::*;
-use std::ops::{Mul, Sub};
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
-pub struct LagrangePowers<E: Pairing> {
-    pub li: Vec<E::G1>,
-    pub li_minus0: Vec<E::G1>,
-    pub li_x: Vec<E::G1>,
-    pub li_lj_z: Vec<Vec<E::G1>>,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct LagrangePowers {
+    pub li: Vec<G1Projective>,
+    pub li_minus0: Vec<G1Projective>,
+    pub li_x: Vec<G1Projective>,
+    pub li_lj_z: Vec<Vec<G1Projective>>,
 }
 
-impl<E: Pairing> LagrangePowers<E> {
-    pub fn new(tau: E::ScalarField, n: usize) -> Self {
-        let mut li_evals: Vec<E::ScalarField> = vec![E::ScalarField::zero(); n];
-        let mut li_evals_minus0: Vec<E::ScalarField> = vec![E::ScalarField::zero(); n];
-        let mut li_evals_x: Vec<E::ScalarField> = vec![E::ScalarField::zero(); n];
-        let tau_inv = tau.inverse().unwrap();
+impl LagrangePowers {
+    pub fn new(tau: Scalar, n: usize) -> Self {
+        let mut li_evals: Vec<Scalar> = vec![Scalar::ZERO; n];
+        let mut li_evals_minus0: Vec<Scalar> = vec![Scalar::ZERO; n];
+        let mut li_evals_x: Vec<Scalar> = vec![Scalar::ZERO; n];
+        let tau_inv = tau.invert().unwrap();
         for i in 0..n {
             let li = lagrange_poly(n, i);
             li_evals[i] = li.evaluate(&tau);
@@ -37,31 +32,32 @@ impl<E: Pairing> LagrangePowers<E> {
             li_evals_x[i] = li_evals_minus0[i] * tau_inv;
         }
 
-        let z_eval = tau.pow(&[n as u64]) - E::ScalarField::one();
-        let z_eval_inv = z_eval.inverse().unwrap();
+        let z_eval = tau.pow(&[n as u64, 0, 0, 0]) - Scalar::ONE;
+        let z_eval_inv = z_eval.invert().unwrap();
 
-        let mut li = vec![E::G1::zero(); n];
+        let mut li = vec![G1Projective::identity(); n];
         for i in 0..n {
-            li[i] = E::G1::generator() * li_evals[i];
+            li[i] = G1Projective::generator() * li_evals[i];
         }
 
-        let mut li_minus0 = vec![E::G1::zero(); n];
+        let mut li_minus0 = vec![G1Projective::identity(); n];
         li_minus0.par_iter_mut().enumerate().for_each(|(i, elem)| {
-            *elem = E::G1::generator() * li_evals_minus0[i];
+            *elem = G1Projective::generator() * li_evals_minus0[i];
         });
 
-        let mut li_x = vec![E::G1::zero(); n];
+        let mut li_x = vec![G1Projective::identity(); n];
         li_x.par_iter_mut().enumerate().for_each(|(i, elem)| {
-            *elem = E::G1::generator() * li_evals_x[i];
+            *elem = G1Projective::generator() * li_evals_x[i];
         });
 
-        let mut li_lj_z = vec![vec![E::G1::zero(); n]; n];
+        let mut li_lj_z = vec![vec![G1Projective::identity(); n]; n];
         li_lj_z.par_iter_mut().enumerate().for_each(|(i, row)| {
             row.par_iter_mut().enumerate().for_each(|(j, elem)| {
                 *elem = if i == j {
-                    E::G1::generator() * ((li_evals[i] * li_evals[i] - li_evals[i]) * z_eval_inv)
+                    G1Projective::generator()
+                        * ((li_evals[i] * li_evals[i] - li_evals[i]) * z_eval_inv)
                 } else {
-                    E::G1::generator() * (li_evals[i] * li_evals[j] * z_eval_inv)
+                    G1Projective::generator() * (li_evals[i] * li_evals[j] * z_eval_inv)
                 }
             });
         });
@@ -75,41 +71,54 @@ impl<E: Pairing> LagrangePowers<E> {
     }
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
-pub struct SecretKey<E: Pairing> {
-    sk: E::ScalarField,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SecretKey {
+    sk: Scalar,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Default, Debug)]
-pub struct PublicKey<E: Pairing> {
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct PublicKey {
     pub id: usize,
-    pub bls_pk: E::G1,          //BLS pk
-    pub sk_li: E::G1,           //hint
-    pub sk_li_minus0: E::G1,    //hint
-    pub sk_li_lj_z: Vec<E::G1>, //hint
-    pub sk_li_x: E::G1,         //hint
+    pub bls_pk: G1Projective,          //BLS pk
+    pub sk_li: G1Projective,           //hint
+    pub sk_li_minus0: G1Projective,    //hint
+    pub sk_li_lj_z: Vec<G1Projective>, //hint
+    pub sk_li_x: G1Projective,         //hint
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
-pub struct AggregateKey<E: Pairing> {
-    pub pk: Vec<PublicKey<E>>,
-    pub agg_sk_li_lj_z: Vec<E::G1>,
-    pub ask: E::G1,
-    pub z_g2: E::G2,
+impl Default for PublicKey {
+    fn default() -> Self {
+        PublicKey {
+            id: 0,
+            bls_pk: G1Projective::identity(),
+            sk_li: G1Projective::identity(),
+            sk_li_minus0: G1Projective::identity(),
+            sk_li_lj_z: vec![],
+            sk_li_x: G1Projective::identity(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct AggregateKey {
+    pub pk: Vec<PublicKey>,
+    pub agg_sk_li_lj_z: Vec<G1Projective>,
+    pub ask: G1Projective,
+    pub z_g2: G2Projective,
 
     //preprocessed values
-    pub h_minus1: E::G2,
-    pub e_gh: PairingOutput<E>,
+    pub h_minus1: G2Projective,
+    pub e_gh: Gt,
 }
 
-impl<E: Pairing> PublicKey<E> {
+impl PublicKey {
     pub fn new(
         id: usize,
-        bls_pk: E::G1,
-        sk_li: E::G1,
-        sk_li_minus0: E::G1,
-        sk_li_lj_z: Vec<E::G1>,
-        sk_li_x: E::G1,
+        bls_pk: G1Projective,
+        sk_li: G1Projective,
+        sk_li_minus0: G1Projective,
+        sk_li_lj_z: Vec<G1Projective>,
+        sk_li_x: G1Projective,
     ) -> Self {
         PublicKey {
             id,
@@ -122,63 +131,61 @@ impl<E: Pairing> PublicKey<E> {
     }
 }
 
-impl<E: Pairing> SecretKey<E> {
-    pub fn new<R: RngCore>(rng: &mut R) -> Self {
+impl SecretKey {
+    pub fn new<R: rand_core::RngCore>(rng: &mut R) -> Self {
         SecretKey {
-            sk: E::ScalarField::rand(rng),
+            sk: Scalar::random(rng),
         }
     }
 
     pub fn nullify(&mut self) {
-        self.sk = E::ScalarField::one()
+        self.sk = Scalar::ONE
     }
 
-    pub fn get_pk(&self, id: usize, params: &PowersOfTau<E>, n: usize) -> PublicKey<E> {
+    pub fn get_pk(&self, id: usize, params: &PowersOfTau, n: usize) -> PublicKey {
         // TODO: This runs in quadratic time because we are not preprocessing the Li's
         // Fix this.
-        let domain = Radix2EvaluationDomain::<E::ScalarField>::new(n).unwrap();
+        let domain = Radix2EvaluationDomain::new(n).unwrap();
 
         let li = lagrange_poly(n, id);
 
         let mut sk_li_lj_z = vec![];
         for j in 0..n {
             let num = if id == j {
-                li.clone().mul(&li).sub(&li)
+                li.clone().naive_mul(&li) - li.clone()
             } else {
                 //cross-terms
                 let l_j = lagrange_poly(n, j);
-                l_j.mul(&li)
+                l_j.naive_mul(&li)
             };
 
-            let f = num.divide_by_vanishing_poly(domain).0;
+            let f = num.divide_by_vanishing_poly(domain.clone()).0;
             let sk_times_f = &f * self.sk;
 
-            let com = KZG10::commit_g1(params, &sk_times_f)
-                .expect("commitment failed")
-                .into();
+            let com = KZG10::commit_g1(params, &sk_times_f).expect("commitment failed");
 
-            sk_li_lj_z.push(com);
+            sk_li_lj_z.push(com.into());
         }
 
         let f = DensePolynomial::from_coefficients_vec(li.coeffs[1..].to_vec());
         let sk_times_f = &f * self.sk;
-        let sk_li_x = KZG10::commit_g1(params, &sk_times_f)
+        let sk_li_x: G1Projective = KZG10::commit_g1(params, &sk_times_f)
             .expect("commitment failed")
             .into();
 
         let mut f = &li * self.sk;
-        let sk_li = KZG10::commit_g1(params, &f)
+        let sk_li: G1Projective = KZG10::commit_g1(params, &f)
             .expect("commitment failed")
             .into();
 
-        f.coeffs[0] = E::ScalarField::zero();
-        let sk_li_minus0 = KZG10::commit_g1(params, &f)
+        f.coeffs[0] = Scalar::ZERO;
+        let sk_li_minus0: G1Projective = KZG10::commit_g1(params, &f)
             .expect("commitment failed")
             .into();
 
         PublicKey {
             id,
-            bls_pk: E::G1::generator() * self.sk,
+            bls_pk: G1Projective::generator() * self.sk,
             sk_li,
             sk_li_minus0,
             sk_li_lj_z,
@@ -186,7 +193,7 @@ impl<E: Pairing> SecretKey<E> {
         }
     }
 
-    pub fn lagrange_get_pk(&self, id: usize, params: &LagrangePowers<E>, n: usize) -> PublicKey<E> {
+    pub fn lagrange_get_pk(&self, id: usize, params: &LagrangePowers, n: usize) -> PublicKey {
         let mut sk_li_lj_z = vec![];
 
         let sk_li = params.li[id] * self.sk;
@@ -201,7 +208,7 @@ impl<E: Pairing> SecretKey<E> {
 
         PublicKey {
             id,
-            bls_pk: E::G1::generator() * self.sk,
+            bls_pk: G1Projective::generator() * self.sk,
             sk_li,
             sk_li_minus0,
             sk_li_lj_z,
@@ -209,31 +216,38 @@ impl<E: Pairing> SecretKey<E> {
         }
     }
 
-    pub fn partial_decryption(&self, ct: &Ciphertext<E>) -> E::G2 {
+    pub fn partial_decryption(&self, ct: &Ciphertext) -> G2Projective {
         ct.gamma_g2 * self.sk // kind of a bls signature on gamma_g2
     }
 }
 
-impl<E: Pairing> AggregateKey<E> {
-    pub fn new(pk: Vec<PublicKey<E>>, params: &PowersOfTau<E>) -> Self {
+impl AggregateKey {
+    pub fn new(pk: Vec<PublicKey>, params: &PowersOfTau) -> Self {
         let n = pk.len();
-        let h_minus1 = params.powers_of_h[0] * (-E::ScalarField::one());
-        let z_g2 = params.powers_of_h[n] + h_minus1;
+        let h_minus1 = G2Projective::generator() * (-Scalar::ONE);
+        let z_g2 = G2Projective::from(params.powers_of_h[n]) + h_minus1;
 
         // gather sk_li from all public keys
-        let mut ask = E::G1::zero();
+        let mut ask = G1Projective::identity();
         for pki in pk.iter() {
             ask += pki.sk_li;
         }
 
         let mut agg_sk_li_lj_z = vec![];
         for i in 0..n {
-            let mut agg_sk_li_lj_zi = E::G1::zero();
+            let mut agg_sk_li_lj_zi = G1Projective::identity();
             for pkj in pk.iter() {
                 agg_sk_li_lj_zi += pkj.sk_li_lj_z[i];
             }
             agg_sk_li_lj_z.push(agg_sk_li_lj_zi);
         }
+
+        // Compute pairing e(g, h)
+        use pairing::Engine;
+        let e_gh = blstrs::Bls12::pairing(
+            &G1Affine::from(params.powers_of_g[0]),
+            &G2Affine::from(params.powers_of_h[0]),
+        );
 
         AggregateKey {
             pk,
@@ -241,7 +255,7 @@ impl<E: Pairing> AggregateKey<E> {
             ask,
             z_g2,
             h_minus1,
-            e_gh: E::pairing(params.powers_of_g[0], params.powers_of_h[0]),
+            e_gh,
         }
     }
 }
@@ -249,34 +263,31 @@ impl<E: Pairing> AggregateKey<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    type E = ark_bls12_381::Bls12_381;
-    type Fr = <E as Pairing>::ScalarField;
-    type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
+    use rand_core::OsRng;
 
     #[test]
     fn test_setup() {
-        let mut rng = ark_std::test_rng();
+        let mut rng = OsRng;
         let n = 16;
-        let tau = Fr::rand(&mut rng);
-        let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
-        let lagrange_params = LagrangePowers::<E>::new(tau, n);
+        let tau = Scalar::random(&mut rng);
+        let params = KZG10::setup(n, tau).unwrap();
+        let lagrange_params = LagrangePowers::new(tau, n);
 
-        let mut sk: Vec<SecretKey<E>> = Vec::new();
-        let mut pk: Vec<PublicKey<E>> = Vec::new();
-        let mut lagrange_pk: Vec<PublicKey<E>> = Vec::new();
+        let mut sk: Vec<SecretKey> = Vec::new();
+        let mut pk: Vec<PublicKey> = Vec::new();
+        let mut lagrange_pk: Vec<PublicKey> = Vec::new();
 
         for i in 0..n {
-            sk.push(SecretKey::<E>::new(&mut rng));
+            sk.push(SecretKey::new(&mut rng));
             pk.push(sk[i].get_pk(i, &params, n));
             lagrange_pk.push(sk[i].lagrange_get_pk(i, &lagrange_params, n));
 
             assert_eq!(pk[i].sk_li, lagrange_pk[i].sk_li);
             assert_eq!(pk[i].sk_li_minus0, lagrange_pk[i].sk_li_minus0);
-            assert_eq!(pk[i].sk_li_x, lagrange_pk[i].sk_li_x); //computed incorrectly go fix it
+            assert_eq!(pk[i].sk_li_x, lagrange_pk[i].sk_li_x);
             assert_eq!(pk[i].sk_li_lj_z, lagrange_pk[i].sk_li_lj_z);
         }
 
-        let _ak = AggregateKey::<E>::new(pk, &params);
+        let _ak = AggregateKey::new(pk, &params);
     }
 }
