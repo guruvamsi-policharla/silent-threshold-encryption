@@ -33,13 +33,11 @@ fn main() {
     // create the dummy party's keys
     let mut sk = (0..n).map(|_| SecretKey::new(&mut rng)).collect::<Vec<_>>();
     sk[0].nullify();
-    let mut pk = vec![sk[0].lagrange_get_pk(0, &lagrange_params, n); n];
-
-    pk.par_iter_mut().enumerate().for_each(|(i, pk_i)| {
-        if i > 0 {
-            *pk_i = sk[i].lagrange_get_pk(i, &lagrange_params, n);
-        }
-    });
+    let pk = sk
+        .par_iter()
+        .enumerate()
+        .map(|(i, ski)| ski.lagrange_get_pk(i, &lagrange_params, n))
+        .collect::<Vec<_>>();
     end_timer!(key_timer);
 
     let agg_key_timer = start_timer!(|| "Computing the aggregate key");

@@ -25,12 +25,12 @@ pub fn agg_dec(
     // points is where B is set to zero
     // parties is the set of parties who have signed
     let mut points = vec![domain_elements[0]]; // 0 is the dummy party that is always true
-    let mut parties: Vec<usize> = Vec::new(); // parties indexed from 0..n-1
-    for i in 0..n {
-        if selector[i] {
+    let mut parties: Vec<usize> = Vec::with_capacity(n); // parties indexed from 0..n-1
+    for (i, (&selected, &omega_i)) in selector.iter().zip(domain_elements.iter()).enumerate() {
+        if selected {
             parties.push(i);
         } else {
-            points.push(domain_elements[i]);
+            points.push(omega_i);
         }
     }
 
@@ -49,8 +49,8 @@ pub fn agg_dec(
 
     debug_assert!(bminus1.evaluate(&domain_elements[0]) == Scalar::ZERO);
 
-    let xminus1 = DensePolynomial::from_coefficients_vec(vec![-domain_elements[0], Scalar::ONE]);
-    let q0 = &bminus1 / &xminus1;
+    let (q0, remainder) = bminus1.divide_by_linear(domain_elements[0]); // remainder should be 0
+    debug_assert_eq!(remainder, Scalar::ZERO);
 
     let q0_g1: G1Projective = KZG10::commit_g1(params, &q0).unwrap().into();
 
@@ -65,46 +65,55 @@ pub fn agg_dec(
 
     let n_inv = Scalar::from(n as u64).invert().unwrap();
 
+    let scalars: Vec<Scalar> = parties.iter().map(|&i| b_evals[i]).collect();
+
     // compute the aggregate public key using MSM
-    let mut apk = G1Projective::identity();
-    for &i in &parties {
-        apk += agg_key.pk[i].bls_pk * b_evals[i];
-    }
-    apk *= n_inv;
+    let apk = if scalars.is_empty() {
+        G1Projective::identity()
+    } else {
+        let bases: Vec<G1Projective> = parties.iter().map(|&i| agg_key.pk[i].bls_pk).collect();
+        let mut res = G1Projective::multi_exp(&bases, &scalars);
+        res *= n_inv;
+        res
+    };
 
     // compute sigma = (\sum B(omega^i)partial_decryptions[i])/(n) for i in parties
-    let mut sigma = G2Projective::identity();
-    for &i in &parties {
-        sigma += partial_decryptions[i] * b_evals[i];
-    }
-    sigma *= n_inv;
+    let sigma = if scalars.is_empty() {
+        G2Projective::identity()
+    } else {
+        let bases: Vec<G2Projective> = parties.iter().map(|&i| partial_decryptions[i]).collect();
+        let res = G2Projective::multi_exp(&bases, &scalars);
+        res * n_inv
+    };
 
-    // compute Qx, Qhatx and Qz
-    let mut qx = G1Projective::identity();
-    for &i in &parties {
-        qx += agg_key.pk[i].sk_li_x * b_evals[i];
-    }
+    // compute Qx, Qhatx and Qz using MSM
+    let qx = if scalars.is_empty() {
+        G1Projective::identity()
+    } else {
+        let points: Vec<G1Projective> = parties.iter().map(|&i| agg_key.pk[i].sk_li_x).collect();
+        G1Projective::multi_exp(&points, &scalars)
+    };
 
-    let mut qz = G1Projective::identity();
-    for &i in &parties {
-        qz += agg_key.agg_sk_li_lj_z[i] * b_evals[i];
-    }
+    let qz = if scalars.is_empty() {
+        G1Projective::identity()
+    } else {
+        let points: Vec<G1Projective> =
+            parties.iter().map(|&i| agg_key.agg_sk_li_lj_z[i]).collect();
+        G1Projective::multi_exp(&points, &scalars)
+    };
 
-    let mut qhatx = G1Projective::identity();
-    for &i in &parties {
-        qhatx += agg_key.pk[i].sk_li_minus0 * b_evals[i];
-    }
+    let qhatx = if scalars.is_empty() {
+        G1Projective::identity()
+    } else {
+        let points: Vec<G1Projective> = parties
+            .iter()
+            .map(|&i| agg_key.pk[i].sk_li_minus0)
+            .collect();
+        G1Projective::multi_exp(&points, &scalars)
+    };
 
     // e(w1||sa1, sa2||w2)
-    let minus1 = -Scalar::ONE;
-    let w1 = [
-        apk * minus1,
-        qz * minus1,
-        qx * minus1,
-        qhatx,
-        bhat_g1 * minus1,
-        q0_g1 * minus1,
-    ];
+    let w1 = [-apk, -qz, -qx, qhatx, -bhat_g1, -q0_g1];
     let w2 = [b_g2, sigma];
 
     let mut enc_key_lhs = w1.to_vec();
@@ -114,8 +123,11 @@ pub fn agg_dec(
     enc_key_rhs.extend_from_slice(&w2);
 
     // Convert to affine for pairing
-    let lhs_affine: Vec<G1Affine> = enc_key_lhs.iter().map(|p| p.to_affine()).collect();
-    let rhs_affine: Vec<G2Affine> = enc_key_rhs.iter().map(|p| p.to_affine()).collect();
+    let mut lhs_affine = vec![G1Affine::default(); enc_key_lhs.len()];
+    G1Projective::batch_normalize(&enc_key_lhs, &mut lhs_affine);
+
+    let mut rhs_affine = vec![G2Affine::default(); enc_key_rhs.len()];
+    G2Projective::batch_normalize(&enc_key_rhs, &mut rhs_affine);
 
     // Prepare G2 elements for pairing
     let rhs_prepared: Vec<G2Prepared> = rhs_affine.iter().map(|p| G2Prepared::from(*p)).collect();

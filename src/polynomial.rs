@@ -28,11 +28,15 @@ impl DensePolynomial {
 
     /// Remove leading zero coefficients
     fn truncate_leading_zeros(&mut self) {
-        while self.coeffs.len() > 1 && self.coeffs.last() == Some(&Scalar::ZERO) {
-            self.coeffs.pop();
+        Self::truncate_leading_zeros_internal(&mut self.coeffs);
+    }
+
+    fn truncate_leading_zeros_internal(coeffs: &mut Vec<Scalar>) {
+        while coeffs.len() > 1 && coeffs.last() == Some(&Scalar::ZERO) {
+            coeffs.pop();
         }
-        if self.coeffs.is_empty() {
-            self.coeffs.push(Scalar::ZERO);
+        if coeffs.is_empty() {
+            coeffs.push(Scalar::ZERO);
         }
     }
 
@@ -60,6 +64,8 @@ impl DensePolynomial {
 
     /// Naive polynomial multiplication (O(n^2))
     pub fn naive_mul(&self, other: &DensePolynomial) -> DensePolynomial {
+        // println!("naive mul degree: {} {}", self.degree(), other.degree());
+
         if self.coeffs.is_empty() || other.coeffs.is_empty() {
             return DensePolynomial::zero();
         }
@@ -73,6 +79,54 @@ impl DensePolynomial {
         }
 
         DensePolynomial::from_coefficients_vec(result)
+    }
+
+    /// Divide by a monic linear factor (x - root) using synthetic division.
+    /// Returns (quotient, remainder).
+    pub fn divide_by_linear(&self, root: Scalar) -> (DensePolynomial, Scalar) {
+        assert!(self.coeffs.len() > 1, "cannot divide constant polynomial");
+
+        let n = self.coeffs.len() - 1;
+        let mut quotient = vec![Scalar::ZERO; n];
+
+        // synthetic division from highest degree down
+        let mut carry = *self.coeffs.last().unwrap();
+        for (idx, coeff) in self.coeffs.iter().rev().skip(1).enumerate() {
+            let q_pos = n - 1 - idx;
+            quotient[q_pos] = carry;
+            carry = *coeff + root * carry;
+        }
+
+        DensePolynomial::truncate_leading_zeros_internal(&mut quotient);
+        (DensePolynomial::from_coefficients_vec(quotient), carry)
+    }
+
+    /// Multiply two polynomials using FFT (O(n log n))
+    /// not very useful -- our polynomials are small degree
+    pub fn fft_mul(&self, other: &DensePolynomial) -> DensePolynomial {
+        // println!("fft mul degree: {} {}", self.degree(), other.degree());
+
+        if self.coeffs.is_empty() || other.coeffs.is_empty() {
+            return DensePolynomial::zero();
+        }
+
+        let result_len = self.coeffs.len() + other.coeffs.len() - 1;
+        let size = result_len.next_power_of_two();
+        let domain =
+            Radix2EvaluationDomain::new(size).expect("result length must fit in 2-adicity");
+
+        let mut a_eval = domain.fft(&self.coeffs);
+        let b_eval = domain.fft(&other.coeffs);
+
+        // Pointwise multiply evaluations
+        for (a, b) in a_eval.iter_mut().zip(b_eval) {
+            *a *= b;
+        }
+
+        let mut coeffs = domain.ifft(&a_eval);
+        coeffs.truncate(result_len);
+
+        DensePolynomial::from_coefficients_vec(coeffs)
     }
 
     /// Divide polynomial by vanishing polynomial Z_H(x) = x^n - 1
@@ -161,7 +215,7 @@ impl Mul<&DensePolynomial> for &DensePolynomial {
     type Output = DensePolynomial;
 
     fn mul(self, other: &DensePolynomial) -> DensePolynomial {
-        self.naive_mul(other)
+        self.fft_mul(other)
     }
 }
 
@@ -410,7 +464,7 @@ mod tests {
     fn test_polynomial_multiplication() {
         // (1 + x) * (1 + x) = 1 + 2x + x^2
         let p = DensePolynomial::from_coefficients_vec(vec![Scalar::ONE, Scalar::ONE]);
-        let result = p.naive_mul(&p);
+        let result = p.fft_mul(&p);
 
         assert_eq!(result.coeffs.len(), 3);
         assert_eq!(result.coeffs[0], Scalar::ONE);
@@ -427,5 +481,38 @@ mod tests {
         // omega^4 should equal 1
         let omega4 = elements[1] * elements[1] * elements[1] * elements[1];
         assert_eq!(omega4, Scalar::ONE);
+    }
+
+    #[test]
+    fn test_fft_mul_matches_naive() {
+        let a = DensePolynomial::from_coefficients_vec(vec![
+            Scalar::from(1u64),
+            Scalar::from(2u64),
+            Scalar::from(3u64),
+            Scalar::from(4u64),
+        ]);
+        let b = DensePolynomial::from_coefficients_vec(vec![
+            Scalar::from(5u64),
+            Scalar::from(6u64),
+            Scalar::from(7u64),
+        ]);
+
+        let naive = a.naive_mul(&b);
+        let fft = a.fft_mul(&b);
+
+        assert_eq!(fft, naive);
+    }
+
+    #[test]
+    fn test_divide_by_linear() {
+        // (x^2 - 1) / (x - 1) = x + 1
+        let poly =
+            DensePolynomial::from_coefficients_vec(vec![-Scalar::ONE, Scalar::ZERO, Scalar::ONE]);
+        let (quot, rem) = poly.divide_by_linear(Scalar::ONE);
+        assert_eq!(rem, Scalar::ZERO);
+        assert_eq!(
+            quot,
+            DensePolynomial::from_coefficients_vec(vec![Scalar::ONE, Scalar::ONE])
+        );
     }
 }

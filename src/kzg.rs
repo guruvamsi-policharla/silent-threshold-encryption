@@ -1,12 +1,11 @@
 //adapted from https://github.com/arkworks-rs/poly-commit/blob/master/src/kzg10/mod.rs
-#![allow(dead_code)]
-#![allow(unused_imports)]
 
-use blstrs::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
-use ff::{Field, PrimeField};
+use blstrs::{G1Affine, G1Projective, G2Affine, G2Projective, Gt, Scalar};
+use ff::Field;
 use group::{Curve, Group};
+use pairing::Engine;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::ops::*;
 
 use crate::polynomial::DensePolynomial;
 
@@ -18,6 +17,8 @@ pub struct PowersOfTau {
     pub powers_of_g: Vec<G1Affine>,
     /// Group elements of the form `{ \tau^i H }`, where `i` ranges from 0 to `degree`.
     pub powers_of_h: Vec<G2Affine>,
+    /// Pairing e(g, h) precomputed once during setup.
+    pub e_gh: Gt,
 }
 
 #[derive(Debug)]
@@ -48,26 +49,30 @@ impl KZG10 {
         let mut powers_of_tau = vec![Scalar::ONE];
 
         let mut cur = tau;
-        for _ in 0..=max_degree {
+        for _ in 0..max_degree {
             powers_of_tau.push(cur);
             cur *= tau;
         }
-
+        
         // Compute powers of g: [g, g^tau, g^{tau^2}, ..., g^{tau^{max_degree}}]
-        let powers_of_g: Vec<G1Affine> = powers_of_tau[0..=max_degree]
-            .iter()
-            .map(|&power| (g * power).to_affine())
-            .collect();
+        let powers_of_g_proj: Vec<G1Projective> =
+            powers_of_tau.par_iter().map(|&power| g * power).collect();
+        let mut powers_of_g = vec![G1Affine::default(); max_degree + 1];
+        G1Projective::batch_normalize(&powers_of_g_proj, &mut powers_of_g);
 
         // Compute powers of h: [h, h^tau, h^{tau^2}, ..., h^{tau^{max_degree}}]
-        let powers_of_h: Vec<G2Affine> = powers_of_tau[0..=max_degree]
-            .iter()
-            .map(|&power| (h * power).to_affine())
-            .collect();
+        let powers_of_h_proj: Vec<G2Projective> =
+            powers_of_tau.par_iter().map(|&power| h * power).collect();
+        let mut powers_of_h = vec![G2Affine::default(); max_degree + 1];
+        G2Projective::batch_normalize(&powers_of_h_proj, &mut powers_of_h);
+
+        // Precompute pairing e(g, h)
+        let e_gh = blstrs::Bls12::pairing(&G1Affine::from(g), &G2Affine::from(h));
 
         let pp = PowersOfTau {
             powers_of_g,
             powers_of_h,
+            e_gh,
         };
 
         Ok(pp)
@@ -81,13 +86,12 @@ impl KZG10 {
         check_degree_is_too_large(d, params.powers_of_g.len())?;
 
         // MSM: sum of coeffs[i] * powers_of_g[i]
-        let commitment = polynomial
-            .coeffs
+        let scalars = &polynomial.coeffs[..=d];
+        let bases: Vec<G1Projective> = params.powers_of_g[..=d]
             .iter()
-            .zip(&params.powers_of_g[..=d])
-            .fold(G1Projective::identity(), |acc, (coeff, base)| {
-                acc + base * coeff
-            });
+            .map(G1Projective::from)
+            .collect();
+        let commitment = G1Projective::multi_exp(&bases, scalars);
 
         Ok(commitment.to_affine())
     }
@@ -100,13 +104,12 @@ impl KZG10 {
         check_degree_is_too_large(d, params.powers_of_h.len())?;
 
         // MSM: sum of coeffs[i] * powers_of_h[i]
-        let commitment = polynomial
-            .coeffs
+        let scalars = &polynomial.coeffs[..=d];
+        let bases: Vec<G2Projective> = params.powers_of_h[..=d]
             .iter()
-            .zip(&params.powers_of_h[..=d])
-            .fold(G2Projective::identity(), |acc, (coeff, base)| {
-                acc + base * coeff
-            });
+            .map(G2Projective::from)
+            .collect();
+        let commitment = G2Projective::multi_exp(&bases, scalars);
 
         Ok(commitment.to_affine())
     }

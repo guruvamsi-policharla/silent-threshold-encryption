@@ -1,4 +1,4 @@
-use blstrs::{G1Affine, G1Projective, G2Affine, G2Projective, Gt, Scalar};
+use blstrs::{G1Projective, G2Projective, Gt, Scalar};
 use ff::Field;
 use group::Group;
 use serde::{Deserialize, Serialize};
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::encryption::Ciphertext;
 use crate::kzg::{PowersOfTau, KZG10};
 use crate::polynomial::{DensePolynomial, Radix2EvaluationDomain};
-use crate::utils::lagrange_poly;
+use crate::utils::{lagrange_poly, lagrange_polys};
 use rayon::prelude::*;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -19,12 +19,12 @@ pub struct LagrangePowers {
 
 impl LagrangePowers {
     pub fn new(tau: Scalar, n: usize) -> Self {
+        let lagranges = lagrange_polys(n);
         let mut li_evals: Vec<Scalar> = vec![Scalar::ZERO; n];
         let mut li_evals_minus0: Vec<Scalar> = vec![Scalar::ZERO; n];
         let mut li_evals_x: Vec<Scalar> = vec![Scalar::ZERO; n];
         let tau_inv = tau.invert().unwrap();
-        for i in 0..n {
-            let li = lagrange_poly(n, i);
+        for (i, li) in lagranges.iter().enumerate() {
             li_evals[i] = li.evaluate(&tau);
 
             li_evals_minus0[i] = li_evals[i] - li.coeffs[0];
@@ -32,35 +32,40 @@ impl LagrangePowers {
             li_evals_x[i] = li_evals_minus0[i] * tau_inv;
         }
 
-        let z_eval = tau.pow(&[n as u64, 0, 0, 0]) - Scalar::ONE;
+        let z_eval = tau.pow([n as u64, 0, 0, 0]) - Scalar::ONE;
         let z_eval_inv = z_eval.invert().unwrap();
 
-        let mut li = vec![G1Projective::identity(); n];
-        for i in 0..n {
-            li[i] = G1Projective::generator() * li_evals[i];
-        }
+        let li = (0..n)
+            .into_par_iter()
+            .map(|i| G1Projective::generator() * li_evals[i])
+            .collect::<Vec<_>>();
 
-        let mut li_minus0 = vec![G1Projective::identity(); n];
-        li_minus0.par_iter_mut().enumerate().for_each(|(i, elem)| {
-            *elem = G1Projective::generator() * li_evals_minus0[i];
-        });
+        let li_minus0 = li_evals_minus0
+            .par_iter()
+            .map(|&eval| G1Projective::generator() * eval)
+            .collect::<Vec<_>>();
 
-        let mut li_x = vec![G1Projective::identity(); n];
-        li_x.par_iter_mut().enumerate().for_each(|(i, elem)| {
-            *elem = G1Projective::generator() * li_evals_x[i];
-        });
+        let li_x = li_evals_x
+            .par_iter()
+            .map(|&eval| G1Projective::generator() * eval)
+            .collect::<Vec<_>>();
 
-        let mut li_lj_z = vec![vec![G1Projective::identity(); n]; n];
-        li_lj_z.par_iter_mut().enumerate().for_each(|(i, row)| {
-            row.par_iter_mut().enumerate().for_each(|(j, elem)| {
-                *elem = if i == j {
-                    G1Projective::generator()
-                        * ((li_evals[i] * li_evals[i] - li_evals[i]) * z_eval_inv)
-                } else {
-                    G1Projective::generator() * (li_evals[i] * li_evals[j] * z_eval_inv)
-                }
-            });
-        });
+        let li_lj_z = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                (0..n)
+                    .into_par_iter()
+                    .map(|j| {
+                        if i == j {
+                            G1Projective::generator()
+                                * ((li_evals[i] * li_evals[i] - li_evals[i]) * z_eval_inv)
+                        } else {
+                            G1Projective::generator() * (li_evals[i] * li_evals[j] * z_eval_inv)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
 
         LagrangePowers {
             li,
@@ -194,17 +199,17 @@ impl SecretKey {
     }
 
     pub fn lagrange_get_pk(&self, id: usize, params: &LagrangePowers, n: usize) -> PublicKey {
-        let mut sk_li_lj_z = vec![];
-
         let sk_li = params.li[id] * self.sk;
 
         let sk_li_minus0 = params.li_minus0[id] * self.sk;
 
         let sk_li_x = params.li_x[id] * self.sk;
 
-        for j in 0..n {
-            sk_li_lj_z.push(params.li_lj_z[id][j] * self.sk);
-        }
+        let sk_li_lj_z = params.li_lj_z[id]
+            .iter()
+            .take(n)
+            .map(|elem| elem * self.sk)
+            .collect();
 
         PublicKey {
             id,
@@ -224,7 +229,7 @@ impl SecretKey {
 impl AggregateKey {
     pub fn new(pk: Vec<PublicKey>, params: &PowersOfTau) -> Self {
         let n = pk.len();
-        let h_minus1 = G2Projective::generator() * (-Scalar::ONE);
+        let h_minus1 = -G2Projective::generator();
         let z_g2 = G2Projective::from(params.powers_of_h[n]) + h_minus1;
 
         // gather sk_li from all public keys
@@ -233,21 +238,16 @@ impl AggregateKey {
             ask += pki.sk_li;
         }
 
-        let mut agg_sk_li_lj_z = vec![];
-        for i in 0..n {
-            let mut agg_sk_li_lj_zi = G1Projective::identity();
-            for pkj in pk.iter() {
-                agg_sk_li_lj_zi += pkj.sk_li_lj_z[i];
-            }
-            agg_sk_li_lj_z.push(agg_sk_li_lj_zi);
-        }
-
-        // Compute pairing e(g, h)
-        use pairing::Engine;
-        let e_gh = blstrs::Bls12::pairing(
-            &G1Affine::from(params.powers_of_g[0]),
-            &G2Affine::from(params.powers_of_h[0]),
-        );
+        let agg_sk_li_lj_z = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let mut agg_sk_li_lj_zi = G1Projective::identity();
+                for pkj in pk.iter() {
+                    agg_sk_li_lj_zi += pkj.sk_li_lj_z[i];
+                }
+                agg_sk_li_lj_zi
+            })
+            .collect::<Vec<_>>();
 
         AggregateKey {
             pk,
@@ -255,7 +255,7 @@ impl AggregateKey {
             ask,
             z_g2,
             h_minus1,
-            e_gh,
+            e_gh: params.e_gh,
         }
     }
 }
