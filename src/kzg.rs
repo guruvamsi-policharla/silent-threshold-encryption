@@ -53,7 +53,7 @@ impl KZG10 {
             powers_of_tau.push(cur);
             cur *= tau;
         }
-        
+
         // Compute powers of g: [g, g^tau, g^{tau^2}, ..., g^{tau^{max_degree}}]
         let powers_of_g_proj: Vec<G1Projective> =
             powers_of_tau.par_iter().map(|&power| g * power).collect();
