@@ -1,27 +1,23 @@
-use ark_ec::pairing::Pairing;
-use ark_poly::univariate::DensePolynomial;
-use ark_std::UniformRand;
+use blstrs::Scalar;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use ff::Field;
 use silent_threshold_encryption::{
     kzg::KZG10,
     setup::{LagrangePowers, SecretKey},
 };
 
-type E = ark_bls12_381::Bls12_381;
-type Fr = <E as Pairing>::ScalarField;
-type UniPoly381 = DensePolynomial<<E as Pairing>::ScalarField>;
-
 fn bench_setup(c: &mut Criterion) {
+    use rand_core::OsRng;
     // WARNING: This benchmark will take a very long time. It is only meant to measure the speedup when compared to the faster Lagrange setup
     let mut group = c.benchmark_group("setup");
     group.sample_size(10);
-    let mut rng = ark_std::test_rng();
+    let mut rng = OsRng;
     for size in 3..=7 {
         let n = 1 << size; // actually n-1 total parties. one party is a dummy party that is always true
-        let tau = Fr::rand(&mut rng);
-        let params = KZG10::<E, UniPoly381>::setup(n, tau.clone()).unwrap();
+        let tau = Scalar::random(&mut rng);
+        let params = KZG10::setup(n, tau).unwrap();
 
-        let sk = SecretKey::<E>::new(&mut rng);
+        let sk = SecretKey::new(&mut rng);
 
         group.bench_with_input(BenchmarkId::from_parameter(n), &params, |b, inp| {
             b.iter(|| sk.get_pk(0, &inp, n));
@@ -32,13 +28,13 @@ fn bench_setup(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("Lagrange setup");
     group.sample_size(10);
-    let mut rng = ark_std::test_rng();
+    let mut rng = OsRng;
     for size in 3..=10 {
         let n = 1 << size; // actually n-1 total parties. one party is a dummy party that is always true
-        let tau = Fr::rand(&mut rng);
-        let lagrange_params = LagrangePowers::<E>::new(tau, n);
+        let tau = Scalar::random(&mut rng);
+        let lagrange_params = LagrangePowers::new(tau, n);
 
-        let sk = SecretKey::<E>::new(&mut rng);
+        let sk = SecretKey::new(&mut rng);
 
         group.bench_with_input(
             BenchmarkId::from_parameter(n),

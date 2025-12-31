@@ -1,11 +1,7 @@
-use ark_ec::pairing::Pairing;
-use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
-use ark_std::One;
+use blstrs::Scalar;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use silent_threshold_encryption::utils::interp_mostly_zero;
-
-type E = ark_bls12_381::Bls12_381;
-type F = <E as Pairing>::ScalarField;
+use ff::Field;
+use silent_threshold_encryption::{polynomial::Radix2EvaluationDomain, utils::interp_mostly_zero};
 
 fn bench_interpolate(c: &mut Criterion) {
     let mut group = c.benchmark_group("interpolate");
@@ -22,8 +18,8 @@ fn bench_interpolate(c: &mut Criterion) {
             selector.push(false);
         }
 
-        let domain = Radix2EvaluationDomain::<F>::new(n).unwrap();
-        let domain_elements: Vec<F> = domain.elements().collect();
+        let domain = Radix2EvaluationDomain::new(n).unwrap();
+        let domain_elements: Vec<Scalar> = domain.elements().collect();
 
         let mut points = vec![domain_elements[0]]; // 0 is the dummy party that is always true
         let mut parties: Vec<usize> = Vec::new(); // parties indexed from 0..n-1
@@ -37,7 +33,7 @@ fn bench_interpolate(c: &mut Criterion) {
 
         // compute the decryption key
         group.bench_with_input(BenchmarkId::from_parameter(n), &points, |b, inp| {
-            b.iter(|| interp_mostly_zero(F::one(), &inp));
+            b.iter(|| interp_mostly_zero(Scalar::ONE, &inp));
         });
     }
 
